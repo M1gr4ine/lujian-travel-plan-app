@@ -1,0 +1,61 @@
+package com.lujian.travelplan.core
+
+import com.lujian.travelplan.model.PlanCapability
+import com.lujian.travelplan.parser.DalianTemplateParser
+import com.lujian.travelplan.parser.GenericHtmlParser
+import com.lujian.travelplan.parser.LujianJsonParser
+import com.lujian.travelplan.parser.ParseRequest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Test
+
+class PlanParserTest {
+    @Test
+    fun `旅笺 JSON 元数据解析为增强计划`() {
+        val html = """
+            <html><head><title>东京春日</title></head><body>
+            <script id="lujian-plan" type="application/json">
+            {"schemaVersion":1,"title":"东京春日","destinations":[{"name":"东京","countryCode":"JP","latitude":35.6762,"longitude":139.6503}],"days":[{"id":"d1","label":"4月1日","title":"抵达东京","items":[{"id":"i1","time":"14:00","title":"浅草散步","category":"景点","cost":"免费","notes":"雷门集合"}]}]}
+            </script></body></html>
+        """.trimIndent()
+
+        val result = LujianJsonParser().parse(ParseRequest("tokyo.html", "text/html", html))
+
+        assertNotNull(result)
+        assertEquals(PlanCapability.ENHANCED, result!!.capability)
+        assertEquals("东京春日", result.title)
+        assertEquals("JP", result.destinations.single().countryCode)
+        assertEquals("浅草散步", result.days.single().items.single().title)
+    }
+
+    @Test
+    fun `大连模板从日期列和行程卡解析结构化内容`() {
+        val html = """
+            <html><head><title>大连旅行计划 · 9月25–29日</title></head><body>
+            <div class="logo-title">大连旅行计划</div>
+            <div class="day-col">
+              <div class="day-name">Day 1</div><div class="day-date">9月25日 周三</div>
+              <div class="stop-card" data-cat="hotel"><span class="card-time">08:30</span><h3 class="card-title">酒店早餐</h3><div class="card-cost">含在房费</div><span class="cat-badge">住宿</span></div>
+            </div>
+            </body></html>
+        """.trimIndent()
+
+        val result = DalianTemplateParser().parse(ParseRequest("大连.html", "text/html", html))
+
+        assertNotNull(result)
+        assertEquals(PlanCapability.ENHANCED, result!!.capability)
+        assertEquals("大连旅行计划", result.title)
+        assertEquals("酒店早餐", result.days.single().items.single().title)
+    }
+
+    @Test
+    fun `普通 HTML 仅保留标题并标记只读`() {
+        val result = GenericHtmlParser().parse(
+            ParseRequest("notes.html", "text/html", "<html><head><title>随手记</title></head><body>正文</body></html>")
+        )
+
+        assertEquals(PlanCapability.VIEW_ONLY, result.capability)
+        assertEquals("随手记", result.title)
+        assertEquals(0, result.days.size)
+    }
+}
