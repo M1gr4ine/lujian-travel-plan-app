@@ -1,0 +1,165 @@
+{
+  "trip": {
+    "destination": "",
+    "destinationEn": "",
+    "headline": "",
+    "destinations": [
+      {
+        "name": "",
+        "countryCode": "",
+        "latitude": null,
+        "longitude": null
+      }
+    ],
+    "dayCount": 0,
+    "dateRange": "",
+    "travelers": "",
+    "style": "",
+    "baseArea": "",
+    "weather": "",
+    "budgetEstimate": "",
+    "heroImage": "",
+    "assumptions": [],
+    "transportPlans": [
+      {
+        "title": "",
+        "summary": "",
+        "price": "",
+        "warning": "",
+        "url": "",
+        "linkLabel": ""
+      }
+    ],
+    "transportNote": "",
+    "accommodationLabel": "",
+    "accommodationPlans": [
+      {
+        "rank": "",
+        "name": "",
+        "price": "",
+        "note": "",
+        "risk": "",
+        "tone": "",
+        "mapLinks": {
+          "amap": "",
+          "baidu": ""
+        }
+      }
+    ],
+    "accommodationNote": ""
+  },
+  "sources": [
+    {
+      "id": "xhs-001",
+      "platform": "xhs",
+      "url": "",
+      "mobileShareUrl": "",
+      "desktopUrl": "",
+      "title": "",
+      "author": "",
+      "publishedDate": "",
+      "capturedAt": "",
+      "excerpt": "",
+      "query": "",
+      "likes": null,
+      "collects": null,
+      "comments": null
+    }
+  ],
+  "places": [
+    {
+      "id": "place-001",
+      "name": "",
+      "city": "",
+      "area": "",
+      "address": "",
+      "coordinates": {
+        "lat": null,
+        "lng": null
+      },
+      "category": "restaurant",
+      "confidence": "confirmed",
+      "sourceIds": ["xhs-001"],
+      "tags": [],
+      "reason": "",
+      "tips": [],
+      "cost": "",
+      "imageUrl": "",
+      "mapLinks": {
+        "amap": "",
+        "baidu": ""
+      }
+    }
+  ],
+  "warnings": [
+    {
+      "id": "warn-001",
+      "title": "",
+      "severity": "medium",
+      "category": "queue",
+      "placeId": "place-001",
+      "sourceIds": ["xhs-001"],
+      "detail": "",
+      "mitigation": ""
+    }
+  ],
+  "days": [
+    {
+      "id": "day-1",
+      "dayNumber": 1,
+      "title": "",
+      "summary": "",
+      "budgetEstimate": "",
+      "distanceEstimate": "",
+      "durationEstimate": "",
+      "backup": "",
+      "mapStops": [
+        {
+          "id": "hotel",
+          "title": "",
+          "meta": "START",
+          "category": "hotel",
+          "latitude": null,
+          "longitude": null
+        },
+        {
+          "id": "stop-1",
+          "title": "",
+          "meta": "",
+          "category": "attraction",
+          "latitude": null,
+          "longitude": null
+        }
+      ],
+      "mapLegs": [
+        {
+          "from": "hotel",
+          "to": "stop-1",
+          "mode": "ride",
+          "summary": ""
+        },
+        {
+          "from": "stop-1",
+          "to": "hotel",
+          "mode": "drive",
+          "summary": "返回固定酒店"
+        }
+      ],
+      "items": [
+        {
+          "id": "day-1-item-1",
+          "timeBlock": "上午",
+          "title": "",
+          "placeId": "place-001",
+          "duration": "",
+          "cost": "",
+          "imageUrl": "",
+          "transportToNext": "",
+          "sourceIds": ["xhs-001"],
+          "notes": [],
+          "warningIds": []
+        }
+      ]
+    }
+  ]
+}
