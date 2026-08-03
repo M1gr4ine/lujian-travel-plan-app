@@ -5,6 +5,8 @@ import com.lujian.travelplan.model.ParsedPlan
 import com.lujian.travelplan.model.PlanCapability
 import com.lujian.travelplan.model.PlanDayDraft
 import com.lujian.travelplan.model.PlanItemDraft
+import com.lujian.travelplan.model.PlanMapLinks
+import com.lujian.travelplan.model.PlanPlaceDraft
 import com.lujian.travelplan.model.PlanSectionDraft
 import org.json.JSONObject
 import org.jsoup.Jsoup
@@ -22,20 +24,29 @@ fun interface PlanParser {
 class LujianJsonParser : PlanParser {
     override fun parse(request: ParseRequest): ParsedPlan? {
         val document = Jsoup.parse(request.html)
-        val script = document.selectFirst("script#lujian-plan[type=application/json]") ?: return null
-        val root = JSONObject(script.data().ifBlank { script.html() })
-        if (root.optInt("schemaVersion", -1) != 1) return null
+        val root = when (val detection = LujianHtmlContract.inspect(request.html)) {
+            is LujianHtmlDetection.Compatible -> detection.payload
+            LujianHtmlDetection.Absent,
+            is LujianHtmlDetection.Incompatible,
+            -> return null
+        }
 
         val destinations = root.optJSONArray("destinations")?.let { array ->
-            List(array.length()) { index ->
-                val item = array.getJSONObject(index)
-                DestinationDraft(
-                    name = item.optString("name"),
-                    countryCode = item.optNullableString("countryCode"),
-                    latitude = item.optNullableDouble("latitude"),
-                    longitude = item.optNullableDouble("longitude"),
-                )
-            }
+            List(array.length()) { index -> array.opt(index) }
+                .mapNotNull { item ->
+                    when (item) {
+                        is JSONObject -> DestinationDraft(
+                            name = item.optString("name"),
+                            countryCode = item.optNullableString("countryCode"),
+                            latitude = item.optLatitude("latitude"),
+                            longitude = item.optLongitude("longitude"),
+                        )
+                        is String -> item.takeIf { it.isNotBlank() }?.let {
+                            DestinationDraft(it, null, null, null)
+                        }
+                        else -> null
+                    }
+                }
         }.orEmpty()
 
         val days = root.optJSONArray("days")?.let { array ->
@@ -51,6 +62,9 @@ class LujianJsonParser : PlanParser {
                             category = item.optNullableString("category"),
                             cost = item.optNullableString("cost"),
                             notes = item.optNullableString("notes"),
+                            placeId = item.optNullableString("placeId"),
+                            transport = item.optNullableString("transport"),
+                            mapLinks = item.optMapLinks(),
                         )
                     }
                 }.orEmpty()
@@ -59,9 +73,35 @@ class LujianJsonParser : PlanParser {
                     label = day.optString("label"),
                     title = day.optString("title"),
                     items = items,
+                    summary = day.optNullableString("summary"),
+                    budget = day.optNullableString("budget"),
+                    backup = day.optNullableString("backup"),
                 )
             }
         }.orEmpty()
+
+        val places = root.optJSONArray("places")?.let { array ->
+            List(array.length()) { index -> array.optJSONObject(index) }
+                .filterNotNull()
+                .mapIndexed { index, place ->
+                    val coordinates = place.optJSONObject("coordinates")
+                    PlanPlaceDraft(
+                        id = place.optString("id", "place-$index"),
+                        name = place.optString("name"),
+                        address = place.optNullableString("address"),
+                        latitude = place.optLatitude("latitude")
+                            ?: coordinates?.optLatitude("latitude")
+                            ?: coordinates?.optLatitude("lat"),
+                        longitude = place.optLongitude("longitude")
+                            ?: coordinates?.optLongitude("longitude")
+                            ?: coordinates?.optLongitude("lng")
+                            ?: coordinates?.optLongitude("lon"),
+                        mapLinks = place.optMapLinks(),
+                    )
+                }
+        }.orEmpty()
+
+        val trip = root.optJSONObject("trip")
 
         val sections = buildList {
             root.optJSONArray("sections")?.let { array ->
@@ -89,6 +129,18 @@ class LujianJsonParser : PlanParser {
             destinations = destinations,
             days = days,
             sections = sections,
+            dateRange = root.optNullableString("dateRange"),
+            travelers = root.optNullableString("travelers"),
+            style = root.optNullableString("style"),
+            baseArea = root.optNullableString("baseArea"),
+            budget = root.optNullableString("budget"),
+            accommodationBudget = trip?.optNullableString("accommodationBudget")
+                ?: trip?.optNullableString("hotelBudget"),
+            assumptions = root.optJSONArray("assumptions")?.let { array ->
+                List(array.length()) { index -> array.optString(index) }.filter { it.isNotBlank() }
+            }.orEmpty(),
+            places = places,
+            sourcePayloadJson = root.toString(),
         )
     }
 }
@@ -173,4 +225,18 @@ private fun JSONObject.optNullableString(name: String): String? =
     optString(name).ifBlank { null }
 
 private fun JSONObject.optNullableDouble(name: String): Double? =
-    if (has(name) && !isNull(name)) optDouble(name) else null
+    if (has(name) && !isNull(name)) optDouble(name).takeIf(Double::isFinite) else null
+
+private fun JSONObject.optLatitude(name: String): Double? =
+    optNullableDouble(name)?.takeIf { it in -90.0..90.0 }
+
+private fun JSONObject.optLongitude(name: String): Double? =
+    optNullableDouble(name)?.takeIf { it in -180.0..180.0 }
+
+private fun JSONObject.optMapLinks(): PlanMapLinks {
+    val links = optJSONObject("mapLinks") ?: return PlanMapLinks()
+    return PlanMapLinks(
+        amap = links.optNullableString("amap"),
+        baidu = links.optNullableString("baidu"),
+    )
+}

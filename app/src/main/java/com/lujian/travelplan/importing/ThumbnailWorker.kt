@@ -44,7 +44,7 @@ class ThumbnailWorker(
         } ?: fallbackThumbnail(title)
 
         return withContext(Dispatchers.IO) {
-            val file = File(applicationContext.filesDir, "plans/$planId/content-thumbnail-v4.png").apply {
+            val file = File(applicationContext.filesDir, "plans/$planId/$OUTPUT_FILE_NAME").apply {
                 parentFile?.mkdirs()
             }
             FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 92, it) }
@@ -159,5 +159,6 @@ class ThumbnailWorker(
 
     companion object {
         const val INPUT_CUSTOM_COVER_PATH = "customCoverPath"
+        const val OUTPUT_FILE_NAME = "content-thumbnail-v5.png"
     }
 }

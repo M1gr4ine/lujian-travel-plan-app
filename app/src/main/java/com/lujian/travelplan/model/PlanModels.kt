@@ -19,6 +19,9 @@ data class PlanItemDraft(
     val category: String?,
     val cost: String?,
     val notes: String?,
+    val placeId: String? = null,
+    val transport: String? = null,
+    val mapLinks: PlanMapLinks = PlanMapLinks(),
 )
 
 data class PlanDayDraft(
@@ -26,6 +29,23 @@ data class PlanDayDraft(
     val label: String,
     val title: String,
     val items: List<PlanItemDraft>,
+    val summary: String? = null,
+    val budget: String? = null,
+    val backup: String? = null,
+)
+
+data class PlanMapLinks(
+    val amap: String? = null,
+    val baidu: String? = null,
+)
+
+data class PlanPlaceDraft(
+    val id: String,
+    val name: String,
+    val address: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val mapLinks: PlanMapLinks = PlanMapLinks(),
 )
 
 data class PlanSectionDraft(
@@ -39,4 +59,14 @@ data class ParsedPlan(
     val destinations: List<DestinationDraft> = emptyList(),
     val days: List<PlanDayDraft> = emptyList(),
     val sections: List<PlanSectionDraft> = emptyList(),
+    val dateRange: String? = null,
+    val travelers: String? = null,
+    val style: String? = null,
+    val baseArea: String? = null,
+    val budget: String? = null,
+    val accommodationBudget: String? = null,
+    val assumptions: List<String> = emptyList(),
+    val places: List<PlanPlaceDraft> = emptyList(),
+    /** 原始增强契约，用于导出时透传技能端的来源、警告和地点证据字段。 */
+    val sourcePayloadJson: String? = null,
 )

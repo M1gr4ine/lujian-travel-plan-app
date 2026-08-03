@@ -40,7 +40,7 @@
   </tr>
 </table>
 
-> 截图来自 Huawei PLA-AL10 真机，运行旅笺 `1.0.1`。
+> 截图来自 Huawei PLA-AL10 真机；`1.1.0` 已在同一设备完成三页签阅读器实机回归。
 
 ## ✨ 核心能力
 
@@ -51,7 +51,7 @@
 | 🗺️ 纸张地图 | MapLibre + 低饱和纸张主题 | 中国计划看中国，出现境外目的地自动看全球 |
 | 📌 计划大头针 | 复古红色球头、短墨色直针、针上方信息框 | 第一次点开名称，第二次进入计划 |
 | 🗃️ 计划库 | 双列方卡、标题封面、管理模式、全选与批量删除 | 行程不再散落在文件夹和聊天记录里 |
-| 🗓️ 单轴日期阅读 | 顶部横向日期轴，点选与左右滑动同步 | 一次专注一天，快速跳到下一段旅程 |
+| 🗓️ 原生计划阅读 | 行程、每日地图、预算三页签，日期点选与左右滑动同步 | 卡片可展开并跳到当天地图，预算集中核对 |
 | ✍️ 结构化编辑 | 编辑计划名、地点、日期、每日标题与行程项 | 临时改时间、费用、备注，不必重做整份 HTML |
 | 🌐 原页查看 | 普通 HTML 进入隔离 WebView，增强计划可核对原页 | 原设计保留，移动阅读也不打折 |
 | 📤 独立导出 | 生成 UTF-8、无 BOM、自包含移动版 HTML | 编辑结果可以再次保存、分享和重新导入 |
@@ -77,9 +77,10 @@
 ### 阅读、编辑与导出
 
 1. 在首页点大头针，或在计划库点计划卡进入详情。
-2. 点击顶部日期，或左右滑动，切换当天行程。
-3. 点击右上角铅笔进入编辑模式；可增删、排序并修改行程项。
-4. 从更多菜单查看原始 HTML，或导出新的独立 HTML 文件。
+2. 在“🗓️ 行程 / 🗺️ 每日地图 / 💰 预算”之间切换；日期栏会在行程与地图之间保持同步。
+3. 展开行程卡可查看完整说明、下一程交通，并跳到当天地图中的对应地点。
+4. 点击右上角铅笔进入编辑模式；可增删、排序并修改行程项。
+5. 从更多菜单查看原始 HTML，或导出新的独立 HTML 文件。
 
 ### 管理多个计划
 
@@ -111,12 +112,13 @@ flowchart LR
 - 使用 SHA-256 识别重复内容。
 - 原始字节永不被编辑流程覆盖；移动版 HTML 与缩略图另行保存。
 - 缩略图异步生成，导入成功不会等待截图完成。
+- 缩略图优先截取 `data-lujian-cover` 标记的品牌栏与主标题；旧模板回退到主标题，最后才生成文字封面。
 
 ## 🧩 三种 HTML，三种接入深度
 
 | 类型 | 如何识别 | 阅读体验 | 地图 | 结构化编辑 |
 | --- | --- | --- | --- | --- |
-| 旅笺增强格式 | `script#lujian-plan`，`schemaVersion=1` | 原生日期轴阅读器 | 读取元数据坐标 | ✅ 支持 |
+| 旅笺增强格式 | `script#lujian-plan`，`schemaVersion=1` | 原生行程 / 每日地图 / 预算 | 读取每日地点与路线坐标 | ✅ 支持 |
 | 大连模板 | `.day-col` 等现有模板结构 | 原生日期轴阅读器 | 内置模板地点 | ✅ 支持 |
 | 普通 HTML | 其他有效 HTML | 安全 WebView | 尝试标签、城市识别和定位确认 | 👀 仅查看 |
 
@@ -211,10 +213,11 @@ LujianJsonParser → DalianTemplateParser → GenericHtmlParser
 4. `h1`
 5. `.logo-title`
 
-推荐给主视觉区加一个明确标记：
+推荐给静态品牌栏与主标题的共同容器加一个明确标记；文字必须直接写入 HTML，不能只靠 JavaScript 填充：
 
 ```html
 <section data-lujian-cover>
+  <div class="brand">✈️ 大连旅行计划</div>
   <h1>五天说走就走，把大连吃个痛快。</h1>
 </section>
 ```
@@ -237,11 +240,11 @@ LujianJsonParser → DalianTemplateParser → GenericHtmlParser
 | --- | --- |
 | 应用名称 | 旅笺 |
 | Application ID | `com.lujian.travelplan` |
-| 当前版本 | `1.0.1`（versionCode 2） |
+| 当前版本 | `1.1.0`（versionCode 3） |
 | 最低系统 | Android 8 / API 26 |
 | 编译与目标 SDK | API 37 |
 | CPU 架构 | 由 debug 构建依赖自动打包 |
-| 安装形式 | 当前为 debug 签名侧载 APK |
+| 安装形式 | debug 签名侧载 APK（Releases 提供） |
 
 本地构建后的 APK 位于：
 
@@ -255,7 +258,7 @@ app/build/outputs/apk/debug/app-debug.apk
 adb install -r app\build\outputs\apk\debug\app-debug.apk
 ```
 
-正式 Release 安装包将在本地功能收敛并完成验证后上传到仓库的 Releases 页面。
+已验证安装包见 [GitHub Releases](https://github.com/M1gr4ine/travelplan-app/releases/latest)。
 
 ## 🛠️ 技术栈
 

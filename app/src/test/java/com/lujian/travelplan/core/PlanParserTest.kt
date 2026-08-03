@@ -29,6 +29,64 @@ class PlanParserTest {
     }
 
     @Test
+    fun `旅笺目的地字符串数组也可正常接入`() {
+        val html = """
+            <html><body><script id="lujian-plan" type="application/json">
+            {"schemaVersion":1,"title":"大连慢旅行","destinations":["大连"],"days":[{"id":"d1","label":"第一天","title":"抵达","items":[]}]}
+            </script></body></html>
+        """.trimIndent()
+
+        val result = LujianJsonParser().parse(ParseRequest("dalian.html", "text/html", html))
+
+        assertNotNull(result)
+        assertEquals("大连", result!!.destinations.single().name)
+    }
+
+    @Test
+    fun `旅笺每日地图与预算数据完整接入`() {
+        val html = """
+            <html><body><script id="lujian-plan" type="application/json">
+            {
+              "schemaVersion":1,
+              "title":"大连慢旅行",
+              "destinations":[{"name":"大连"}],
+              "budget":"约 3000 元",
+              "baseArea":"中山区",
+              "places":[{"id":"p1","name":"星海广场","coordinates":{"latitude":38.8817,"longitude":121.5880},"mapLinks":{"amap":"https://uri.amap.com/marker?position=121.5880,38.8817"}}],
+              "days":[{"id":"d1","label":"9月25日","title":"海边慢游","budget":"约 300 元","items":[{"id":"i1","time":"10:00","title":"星海广场","category":"attraction","cost":"免费","notes":"沿海散步","placeId":"p1","transport":"步行"}]}]
+            }
+            </script></body></html>
+        """.trimIndent()
+
+        val result = LujianJsonParser().parse(ParseRequest("dalian.html", "text/html", html))!!
+
+        assertEquals("约 3000 元", result.budget)
+        assertEquals("中山区", result.baseArea)
+        assertEquals("约 300 元", result.days.single().budget)
+        assertEquals("p1", result.days.single().items.single().placeId)
+        assertEquals("步行", result.days.single().items.single().transport)
+        assertEquals(38.8817, result.places.single().latitude!!, 0.0001)
+        assertEquals(121.5880, result.places.single().longitude!!, 0.0001)
+        assertEquals("https://uri.amap.com/marker?position=121.5880,38.8817", result.places.single().mapLinks.amap)
+    }
+
+    @Test
+    fun `旅笺越界坐标不会进入原生地图`() {
+        val html = """
+            <html><body><script id="lujian-plan" type="application/json">
+            {"schemaVersion":1,"title":"异常坐标","destinations":[{"name":"测试地","latitude":91,"longitude":181}],"places":[{"id":"p1","name":"测试点","latitude":-91,"longitude":-181}],"days":[{"id":"d1","label":"第一天","title":"测试","items":[]}]}
+            </script></body></html>
+        """.trimIndent()
+
+        val result = LujianJsonParser().parse(ParseRequest("invalid-coordinate.html", "text/html", html))!!
+
+        assertEquals(null, result.destinations.single().latitude)
+        assertEquals(null, result.destinations.single().longitude)
+        assertEquals(null, result.places.single().latitude)
+        assertEquals(null, result.places.single().longitude)
+    }
+
+    @Test
     fun `大连模板从日期列和行程卡解析结构化内容`() {
         val html = """
             <html><head><title>大连旅行计划 · 9月25–29日</title></head><body>

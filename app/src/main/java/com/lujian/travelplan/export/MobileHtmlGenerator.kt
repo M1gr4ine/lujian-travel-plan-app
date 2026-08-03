@@ -17,34 +17,59 @@ object MobileHtmlGenerator {
                 destination.longitude?.let { append("<meta name=\"lujian:longitude\" content=\"$it\">") }
             }
         }.orEmpty()
-        val metadata = JSONObject().apply {
+        val sourceMetadata = plan.sourcePayloadJson
+            ?.let { raw -> runCatching { JSONObject(raw) }.getOrNull() }
+            ?: JSONObject()
+        val sourceDestinations = sourceMetadata.objectsBy("destinations", "name")
+        val sourceDays = sourceMetadata.objectsBy("days", "id")
+        val sourceItems = sourceDays.values
+            .flatMap { day -> day.optJSONArray("items").objectsBy("id").entries }
+            .associate { it.toPair() }
+        val sourcePlaces = sourceMetadata.objectsBy("places", "id")
+        val metadata = sourceMetadata.copyObject().apply {
             put("schemaVersion", 1)
             put("title", plan.title)
+            put("destination", primaryDestination?.name.orEmpty())
+            put("dateRange", plan.dateRange.orEmpty())
+            put("travelers", plan.travelers.orEmpty())
+            put("style", plan.style.orEmpty())
+            put("baseArea", plan.baseArea.orEmpty())
+            put("budget", plan.budget.orEmpty())
+            put("assumptions", JSONArray(plan.assumptions))
             put("destinations", JSONArray().apply {
                 plan.destinations.forEach { destination ->
-                    put(JSONObject().apply {
+                    put(sourceDestinations[destination.name].copyOrNew().apply {
                         put("name", destination.name)
-                        put("countryCode", destination.countryCode)
-                        put("latitude", destination.latitude)
-                        put("longitude", destination.longitude)
+                        put("countryCode", destination.countryCode.orEmpty())
+                        destination.latitude?.let { put("latitude", it) }
+                        destination.longitude?.let { put("longitude", it) }
                     })
                 }
             })
             put("days", JSONArray().apply {
                 plan.days.forEach { day ->
-                    put(JSONObject().apply {
+                    put(sourceDays[day.id].copyOrNew().apply {
                         put("id", day.id)
                         put("label", day.label)
                         put("title", day.title)
+                        put("summary", day.summary.orEmpty())
+                        put("budget", day.budget.orEmpty())
+                        put("backup", day.backup.orEmpty())
                         put("items", JSONArray().apply {
                             day.items.forEach { item ->
-                                put(JSONObject().apply {
+                                put(sourceItems[item.id].copyOrNew().apply {
                                     put("id", item.id)
-                                    put("time", item.time)
+                                    put("time", item.time?.takeIf { it.isNotBlank() } ?: "时间待定")
                                     put("title", item.title)
-                                    put("category", item.category)
-                                    put("cost", item.cost)
-                                    put("notes", item.notes)
+                                    put("category", item.category?.takeIf { it.isNotBlank() } ?: "other")
+                                    put("cost", item.cost.orEmpty())
+                                    put("notes", item.notes.orEmpty())
+                                    put("placeId", item.placeId.orEmpty())
+                                    put("transport", item.transport.orEmpty())
+                                    put("mapLinks", optJSONObject("mapLinks").copyOrNew().apply {
+                                        put("amap", item.mapLinks.amap.orEmpty())
+                                        put("baidu", item.mapLinks.baidu.orEmpty())
+                                    })
                                 })
                             }
                         })
@@ -58,6 +83,26 @@ object MobileHtmlGenerator {
                         put("content", section.content)
                     })
                 }
+            })
+            put("places", JSONArray().apply {
+                plan.places.forEach { place ->
+                    put(sourcePlaces[place.id].copyOrNew().apply {
+                        put("id", place.id)
+                        put("name", place.name)
+                        put("address", place.address.orEmpty())
+                        place.latitude?.let { put("latitude", it) }
+                        place.longitude?.let { put("longitude", it) }
+                        put("mapLinks", optJSONObject("mapLinks").copyOrNew().apply {
+                            put("amap", place.mapLinks.amap.orEmpty())
+                            put("baidu", place.mapLinks.baidu.orEmpty())
+                        })
+                    })
+                }
+            })
+            put("trip", optJSONObject("trip").copyOrNew().apply {
+                put("title", plan.title)
+                put("destination", primaryDestination?.name.orEmpty())
+                put("accommodationBudget", plan.accommodationBudget.orEmpty())
             })
         }
 
@@ -103,6 +148,21 @@ object MobileHtmlGenerator {
                     else -> char
                 },
             )
+        }
+    }
+
+    private fun JSONObject.copyObject(): JSONObject = JSONObject(toString())
+
+    private fun JSONObject?.copyOrNew(): JSONObject = this?.copyObject() ?: JSONObject()
+
+    private fun JSONObject.objectsBy(arrayName: String, key: String): Map<String, JSONObject> =
+        optJSONArray(arrayName).objectsBy(key)
+
+    private fun JSONArray?.objectsBy(key: String): Map<String, JSONObject> = buildMap {
+        val array = this@objectsBy ?: return@buildMap
+        repeat(array.length()) { index ->
+            val item = array.optJSONObject(index) ?: return@repeat
+            item.optString(key).takeIf { it.isNotBlank() }?.let { put(it, item) }
         }
     }
 }

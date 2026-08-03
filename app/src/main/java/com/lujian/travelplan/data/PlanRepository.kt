@@ -16,6 +16,8 @@ import com.lujian.travelplan.model.ParsedPlan
 import com.lujian.travelplan.model.PlanCapability
 import com.lujian.travelplan.model.PlanDayDraft
 import com.lujian.travelplan.model.PlanItemDraft
+import com.lujian.travelplan.model.PlanMapLinks
+import com.lujian.travelplan.model.PlanPlaceDraft
 import com.lujian.travelplan.model.PlanSectionDraft
 import java.io.File
 import kotlinx.coroutines.flow.Flow
@@ -31,8 +33,11 @@ data class StoredPlan(
     val generatedPath: String?,
     val thumbnailPath: String?,
     val compatibilityMode: Boolean,
+    val dataRevision: Int = CURRENT_PLAN_DATA_REVISION,
     val updatedAt: Long,
 )
+
+const val CURRENT_PLAN_DATA_REVISION = 2
 
 data class ImportedPlanFiles(
     val sourceFileName: String,
@@ -78,7 +83,7 @@ class PlanRepository(
                     rawPath = files.rawPath,
                     generatedPath = null,
                     thumbnailPath = null,
-                    sectionsJson = parsed.sections.toJson(),
+                    sectionsJson = parsed.toExtrasJson(),
                     updatedAt = now,
                 ),
             )
@@ -96,7 +101,7 @@ class PlanRepository(
                     generatedPath = null,
                     thumbnailPath = null,
                     compatibilityMode = false,
-                    sectionsJson = parsed.sections.toJson(),
+                    sectionsJson = parsed.toExtrasJson(),
                     createdAt = now,
                     updatedAt = now,
                 ),
@@ -119,7 +124,21 @@ class PlanRepository(
                 title = parsed.title,
                 capability = PlanCapability.ENHANCED.name,
                 generatedPath = generated.relativeTo(context.filesDir).invariantSeparatorsPath,
-                sectionsJson = parsed.sections.toJson(),
+                sectionsJson = parsed.toExtrasJson(),
+                updatedAt = System.currentTimeMillis(),
+            ),
+        )
+    }
+
+    suspend fun refreshParsed(planId: Long, parsed: ParsedPlan) = database.withTransaction {
+        val stored = dao.findById(planId) ?: return@withTransaction
+        clearGraph(planId)
+        insertGraph(planId, parsed)
+        dao.updatePlan(
+            stored.plan.copy(
+                title = parsed.title,
+                capability = parsed.capability.name,
+                sectionsJson = parsed.toExtrasJson(),
                 updatedAt = System.currentTimeMillis(),
             ),
         )
@@ -229,7 +248,9 @@ class PlanRepository(
     }
 }
 
-private fun PlanWithDetails.toStoredPlan(): StoredPlan = StoredPlan(
+private fun PlanWithDetails.toStoredPlan(): StoredPlan {
+    val extras = plan.sectionsJson.toExtras()
+    return StoredPlan(
     id = plan.id,
     parsed = ParsedPlan(
         title = plan.title,
@@ -248,6 +269,7 @@ private fun PlanWithDetails.toStoredPlan(): StoredPlan = StoredPlan(
                 label = relation.day.label,
                 title = relation.day.title,
                 items = relation.items.sortedBy { it.position }.map { item ->
+                    val itemExtras = extras.items[item.sourceId]
                     PlanItemDraft(
                         id = item.sourceId,
                         time = item.time,
@@ -255,30 +277,181 @@ private fun PlanWithDetails.toStoredPlan(): StoredPlan = StoredPlan(
                         category = item.category,
                         cost = item.cost,
                         notes = item.notes,
+                        placeId = itemExtras?.placeId,
+                        transport = itemExtras?.transport,
+                        mapLinks = itemExtras?.mapLinks ?: PlanMapLinks(),
                     )
                 },
+                summary = extras.days[relation.day.sourceId]?.summary,
+                budget = extras.days[relation.day.sourceId]?.budget,
+                backup = extras.days[relation.day.sourceId]?.backup,
             )
         },
-        sections = plan.sectionsJson.toSections(),
+        sections = extras.sections,
+        dateRange = extras.dateRange,
+        travelers = extras.travelers,
+        style = extras.style,
+        baseArea = extras.baseArea,
+        budget = extras.budget,
+        accommodationBudget = extras.accommodationBudget,
+        assumptions = extras.assumptions,
+        places = extras.places,
+        sourcePayloadJson = extras.sourcePayloadJson,
     ),
     sourceFileName = plan.sourceFileName,
     rawPath = plan.rawPath,
     generatedPath = plan.generatedPath,
     thumbnailPath = plan.thumbnailPath,
     compatibilityMode = plan.compatibilityMode,
+    dataRevision = extras.dataRevision,
     updatedAt = plan.updatedAt,
 )
+}
 
-private fun List<PlanSectionDraft>.toJson(): String = JSONArray().apply {
-    this@toJson.forEach { section ->
-        put(JSONObject().put("title", section.title).put("content", section.content))
-    }
+private fun ParsedPlan.toExtrasJson(): String = JSONObject().apply {
+    put("dataRevision", CURRENT_PLAN_DATA_REVISION)
+    put("sections", sections.toJsonArray())
+    put("dateRange", dateRange)
+    put("travelers", travelers)
+    put("style", style)
+    put("baseArea", baseArea)
+    put("budget", budget)
+    put("accommodationBudget", accommodationBudget)
+    put("assumptions", JSONArray(assumptions))
+    put("sourcePayloadJson", sourcePayloadJson)
+    put("places", JSONArray().apply {
+        places.forEach { place ->
+            put(JSONObject().apply {
+                put("id", place.id)
+                put("name", place.name)
+                put("address", place.address)
+                put("latitude", place.latitude)
+                put("longitude", place.longitude)
+                put("mapLinks", place.mapLinks.toJson())
+            })
+        }
+    })
+    put("days", JSONArray().apply {
+        days.forEach { day ->
+            put(JSONObject().apply {
+                put("id", day.id)
+                put("summary", day.summary)
+                put("budget", day.budget)
+                put("backup", day.backup)
+            })
+        }
+    })
+    put("items", JSONArray().apply {
+        days.flatMap { it.items }.forEach { item ->
+            put(JSONObject().apply {
+                put("id", item.id)
+                put("placeId", item.placeId)
+                put("transport", item.transport)
+                put("mapLinks", item.mapLinks.toJson())
+            })
+        }
+    })
 }.toString()
 
-private fun String.toSections(): List<PlanSectionDraft> = runCatching {
-    val array = JSONArray(this)
-    List(array.length()) { index ->
-        val section = array.getJSONObject(index)
+private fun List<PlanSectionDraft>.toJsonArray(): JSONArray = JSONArray().apply {
+    this@toJsonArray.forEach { section ->
+        put(JSONObject().put("title", section.title).put("content", section.content))
+    }
+}
+
+private fun PlanMapLinks.toJson(): JSONObject = JSONObject().apply {
+    put("amap", amap)
+    put("baidu", baidu)
+}
+
+private data class DayExtras(val summary: String?, val budget: String?, val backup: String?)
+
+private data class ItemExtras(val placeId: String?, val transport: String?, val mapLinks: PlanMapLinks)
+
+private data class PlanExtras(
+    val dataRevision: Int = 0,
+    val sections: List<PlanSectionDraft> = emptyList(),
+    val dateRange: String? = null,
+    val travelers: String? = null,
+    val style: String? = null,
+    val baseArea: String? = null,
+    val budget: String? = null,
+    val accommodationBudget: String? = null,
+    val assumptions: List<String> = emptyList(),
+    val places: List<PlanPlaceDraft> = emptyList(),
+    val sourcePayloadJson: String? = null,
+    val days: Map<String, DayExtras> = emptyMap(),
+    val items: Map<String, ItemExtras> = emptyMap(),
+)
+
+private fun String.toExtras(): PlanExtras = runCatching {
+    val trimmed = trimStart()
+    if (trimmed.startsWith("[")) {
+        return@runCatching PlanExtras(sections = JSONArray(this).toSections())
+    }
+    val root = JSONObject(this)
+    val places = root.optJSONArray("places")?.let { array ->
+        List(array.length()) { index -> array.getJSONObject(index) }.map { place ->
+            PlanPlaceDraft(
+                id = place.optString("id"),
+                name = place.optString("name"),
+                address = place.optNullableString("address"),
+                latitude = place.optNullableDouble("latitude"),
+                longitude = place.optNullableDouble("longitude"),
+                mapLinks = place.optJSONObject("mapLinks").toMapLinks(),
+            )
+        }
+    }.orEmpty()
+    val days = root.optJSONArray("days")?.let { array ->
+        List(array.length()) { index -> array.getJSONObject(index) }.associate { day ->
+            day.optString("id") to DayExtras(
+                summary = day.optNullableString("summary"),
+                budget = day.optNullableString("budget"),
+                backup = day.optNullableString("backup"),
+            )
+        }
+    }.orEmpty()
+    val items = root.optJSONArray("items")?.let { array ->
+        List(array.length()) { index -> array.getJSONObject(index) }.associate { item ->
+            item.optString("id") to ItemExtras(
+                placeId = item.optNullableString("placeId"),
+                transport = item.optNullableString("transport"),
+                mapLinks = item.optJSONObject("mapLinks").toMapLinks(),
+            )
+        }
+    }.orEmpty()
+    PlanExtras(
+        dataRevision = root.optInt("dataRevision", 0),
+        sections = root.optJSONArray("sections")?.toSections().orEmpty(),
+        dateRange = root.optNullableString("dateRange"),
+        travelers = root.optNullableString("travelers"),
+        style = root.optNullableString("style"),
+        baseArea = root.optNullableString("baseArea"),
+        budget = root.optNullableString("budget"),
+        accommodationBudget = root.optNullableString("accommodationBudget"),
+        assumptions = root.optJSONArray("assumptions")?.let { array ->
+            List(array.length()) { index -> array.optString(index) }.filter { it.isNotBlank() }
+        }.orEmpty(),
+        places = places,
+        sourcePayloadJson = root.optNullableString("sourcePayloadJson"),
+        days = days,
+        items = items,
+    )
+}.getOrDefault(PlanExtras())
+
+private fun JSONArray.toSections(): List<PlanSectionDraft> =
+    List(length()) { index ->
+        val section = getJSONObject(index)
         PlanSectionDraft(section.optString("title"), section.optString("content"))
     }
-}.getOrDefault(emptyList())
+
+private fun JSONObject?.toMapLinks(): PlanMapLinks = PlanMapLinks(
+    amap = this?.optNullableString("amap"),
+    baidu = this?.optNullableString("baidu"),
+)
+
+private fun JSONObject.optNullableString(name: String): String? =
+    if (has(name) && !isNull(name)) optString(name).ifBlank { null } else null
+
+private fun JSONObject.optNullableDouble(name: String): Double? =
+    if (has(name) && !isNull(name)) optDouble(name) else null

@@ -1,5 +1,7 @@
 package com.lujian.travelplan.importing
 
+import com.lujian.travelplan.parser.LujianHtmlContract
+import com.lujian.travelplan.parser.LujianHtmlDetection
 import java.security.MessageDigest
 
 sealed interface HtmlValidation {
@@ -42,7 +44,13 @@ object HtmlFileValidator {
         val metadata = validateMetadata(fileName, mimeType, bytes.size.toLong())
         if (metadata is HtmlValidation.Rejected) return metadata
         if (!looksLikeHtml(bytes)) return HtmlValidation.Rejected("文件内容不是有效 HTML")
-        return HtmlValidation.Accepted
+        return when (val detection = LujianHtmlContract.inspect(EncodingDetector.decode(bytes).text)) {
+            LujianHtmlDetection.Absent -> HtmlValidation.Accepted
+            is LujianHtmlDetection.Compatible -> HtmlValidation.Accepted
+            is LujianHtmlDetection.Incompatible -> HtmlValidation.Rejected(
+                "旅笺数据结构无法接入：${detection.reasons.joinToString("；")}",
+            )
+        }
     }
 
     private fun looksLikeHtml(bytes: ByteArray): Boolean {
