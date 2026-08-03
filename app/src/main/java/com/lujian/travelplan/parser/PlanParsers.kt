@@ -154,6 +154,7 @@ class GenericHtmlParser : PlanParser {
         return ParsedPlan(
             title = document.title().ifBlank { request.fileName.substringBeforeLast('.') },
             capability = PlanCapability.VIEW_ONLY,
+            destinations = DestinationHintExtractor.extract(document),
         )
     }
 }

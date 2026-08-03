@@ -70,8 +70,23 @@ class PlanImportService(
             }
 
             val decoded = EncodingDetector.decode(bytes)
-            val parsed = parser.parse(ParseRequest(metadata.fileName, metadata.mimeType, decoded.text))
+            val parsedSource = parser.parse(ParseRequest(metadata.fileName, metadata.mimeType, decoded.text))
                 ?: return@withContext ImportResult.Failure("无法读取这个 HTML 计划")
+            val parsed = parsedSource.copy(
+                destinations = parsedSource.destinations.map { destination ->
+                    if (destination.latitude != null && destination.longitude != null) {
+                        destination
+                    } else {
+                        locationResolver.resolve(destination.name).firstOrNull()?.let { candidate ->
+                            destination.copy(
+                                countryCode = candidate.countryCode ?: destination.countryCode,
+                                latitude = candidate.latitude,
+                                longitude = candidate.longitude,
+                            )
+                        } ?: destination
+                    }
+                },
+            )
             val folder = File(context.filesDir, "plans/import-${UUID.randomUUID()}").apply { mkdirs() }
             val raw = File(folder, "original.html").apply { writeBytes(bytes) }
             val planId = repository.insertImported(

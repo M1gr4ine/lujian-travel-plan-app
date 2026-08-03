@@ -58,4 +58,39 @@ class PlanParserTest {
         assertEquals("随手记", result.title)
         assertEquals(0, result.days.size)
     }
+
+    @Test
+    fun `普通 HTML 的旅笺地理标签直接生成带坐标目的地`() {
+        val html = """
+            <html><head><title>杭州周末</title>
+            <meta name="lujian:destination" content="杭州">
+            <meta name="lujian:country-code" content="CN">
+            <meta name="lujian:latitude" content="30.2741">
+            <meta name="lujian:longitude" content="120.1551">
+            </head><body>西湖散步</body></html>
+        """.trimIndent()
+
+        val result = GenericHtmlParser().parse(ParseRequest("hangzhou.html", "text/html", html))
+
+        assertEquals("杭州", result.destinations.single().name)
+        assertEquals("CN", result.destinations.single().countryCode)
+        assertEquals(30.2741, result.destinations.single().latitude!!, 0.0001)
+        assertEquals(120.1551, result.destinations.single().longitude!!, 0.0001)
+    }
+
+    @Test
+    fun `没有标签时从标题识别常见旅游城市及坐标`() {
+        val result = GenericHtmlParser().parse(
+            ParseRequest(
+                "plan.html",
+                "text/html",
+                "<html><head><title>青岛三日旅行计划</title></head><body><h1>海边慢游</h1></body></html>",
+            ),
+        )
+
+        assertEquals("青岛", result.destinations.single().name)
+        assertEquals("CN", result.destinations.single().countryCode)
+        assertNotNull(result.destinations.single().latitude)
+        assertNotNull(result.destinations.single().longitude)
+    }
 }

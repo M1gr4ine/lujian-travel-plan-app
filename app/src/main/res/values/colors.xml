@@ -2,4 +2,5 @@
 <resources>
     <color name="paper">#FAF6EF</color>
     <color name="coral">#FF6B4A</color>
+    <color name="icon_background">#F2B43A</color>
 </resources>

@@ -16,6 +16,10 @@ interface PlanDao {
     fun observeAll(): Flow<List<PlanWithDetails>>
 
     @Transaction
+    @Query("SELECT * FROM plans ORDER BY updatedAt DESC")
+    suspend fun getAll(): List<PlanWithDetails>
+
+    @Transaction
     @Query("SELECT * FROM plans WHERE id = :id")
     suspend fun findById(id: Long): PlanWithDetails?
 

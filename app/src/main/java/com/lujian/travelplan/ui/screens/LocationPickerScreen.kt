@@ -34,6 +34,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.lujian.travelplan.data.PlanRepository
 import com.lujian.travelplan.data.StoredPlan
 import com.lujian.travelplan.importing.LocationCandidate
+import com.lujian.travelplan.map.LUJIAN_MAP_STYLE_URL
+import com.lujian.travelplan.map.LujianMapStyle
 import com.lujian.travelplan.ui.components.PaperCard
 import com.lujian.travelplan.ui.theme.Coral
 import com.lujian.travelplan.ui.theme.Paper
@@ -82,8 +84,9 @@ fun LocationPickerScreen(
                 factory = {
                     mapView.apply {
                         getMapAsync { map ->
-                            map.setStyle(Style.Builder().fromUri("https://tiles.openfreemap.org/styles/liberty")) {
-                                map.cameraPosition = CameraPosition.Builder().target(LatLng(35.5, 104.0)).zoom(3.1).build()
+                            map.setStyle(Style.Builder().fromUri(LUJIAN_MAP_STYLE_URL)) { style ->
+                                LujianMapStyle.apply(style)
+                                map.cameraPosition = CameraPosition.Builder().target(LatLng(31.5, 104.5)).zoom(3.25).build()
                                 map.addOnMapClickListener { point -> selected = point; true }
                             }
                         }

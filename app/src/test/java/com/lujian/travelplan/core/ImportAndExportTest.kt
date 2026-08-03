@@ -74,6 +74,8 @@ class ImportAndExportTest {
 
         assertFalse(html.startsWith("\uFEFF"))
         assertTrue(html.contains("charset=\"utf-8\""))
+        assertTrue(html.contains("name=\"lujian:destination\" content=\"大连\""))
+        assertTrue(html.contains("name=\"lujian:latitude\" content=\"38.914\""))
         assertEquals("星海广场", parsed!!.days.single().items.single().title)
     }
 

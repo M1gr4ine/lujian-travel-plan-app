@@ -6,10 +6,12 @@
 
 - Kotlin + Jetpack Compose，最低 Android 8（API 26），目标 API 37。
 - 系统开屏接续“航线绘制—大头针—旅笺”品牌动画。
-- 首页使用 MapLibre + OpenFreeMap Liberty；中国/全球视野自动切换，相近目的地聚合。
+- 首页使用 MapLibre + OpenFreeMap；中国/全球视野自动切换，相近目的地聚合。
+- 地图使用旅笺纸张色板定制的极简 Positron 样式和珊瑚色墨边大头针。
 - 计划库使用双列方卡，支持系统文件选择器以及微信 `ACTION_SEND` / `ACTION_VIEW`。
 - 支持 UTF-8、GB18030、BOM 和 `meta charset`；文件上限 50 MB，使用 SHA-256 检测重复。
 - 解析顺序：旅笺 JSON 元数据、大连模板、普通 HTML。
+- 普通 HTML 会读取旅笺/Geo 地理标签，并从标题、一级标题识别常见旅游城市；旧计划会在启动时自动重新索引。
 - 增强计划使用顶部单轴日期切换；日期点选和左右滑动保持同步。
 - 编辑计划名、目的地、日期、每日标题以及行程项；生成版不会覆盖原始 HTML。
 - 普通 HTML 通过 `WebViewAssetLoader` 隔离加载，默认禁用 JavaScript、文件访问、明文 HTTP、下载和原生桥。
@@ -52,5 +54,14 @@ Debug APK 输出到 `app/build/outputs/apk/debug/app-debug.apk`。
   ]
 }
 </script>
+```
+
+普通 HTML 也可以只添加下列地理标签，导入后会直接显示地图点位：
+
+```html
+<meta name="lujian:destination" content="大连">
+<meta name="lujian:country-code" content="CN">
+<meta name="lujian:latitude" content="38.914">
+<meta name="lujian:longitude" content="121.6147">
 ```
 

@@ -4,8 +4,9 @@
     <application
         android:name=".LujianApplication"
         android:allowBackup="true"
-        android:icon="@drawable/ic_splash"
+        android:icon="@mipmap/ic_launcher"
         android:label="旅笺"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Lujian.Starting"
         android:usesCleartextTraffic="false">

@@ -54,6 +54,8 @@ class PlanRepository(
 
     suspend fun getPlan(id: Long): StoredPlan? = dao.findById(id)?.toStoredPlan()
 
+    suspend fun getPlansOnce(): List<StoredPlan> = dao.getAll().map { it.toStoredPlan() }
+
     suspend fun findDuplicate(sha256: String): PlanEntity? = dao.findByHash(sha256)
 
     suspend fun insertImported(
@@ -130,21 +132,27 @@ class PlanRepository(
 
     suspend fun confirmLocation(planId: Long, candidate: LocationCandidate) {
         val stored = getPlan(planId) ?: return
-        val changed = stored.parsed.copy(
-            destinations = stored.parsed.destinations.map { destination ->
+        replaceDestinations(
+            planId,
+            stored.parsed.destinations.map { destination ->
                 if (destination.name == candidate.destinationName) {
                     destination.copy(
                         countryCode = candidate.countryCode,
                         latitude = candidate.latitude,
                         longitude = candidate.longitude,
                     )
-                } else {
-                    destination
-                }
+                } else destination
             },
         )
-        saveEdits(planId, changed)
     }
+
+    suspend fun replaceDestinations(planId: Long, destinations: List<DestinationDraft>) =
+        database.withTransaction {
+            val destinationIds = dao.destinationIds(planId)
+            dao.deleteCrossRefs(planId)
+            if (destinationIds.isNotEmpty()) dao.deleteDestinations(destinationIds)
+            insertDestinations(planId, destinations)
+        }
 
     suspend fun delete(planId: Long) = database.withTransaction {
         val stored = dao.findById(planId) ?: return@withTransaction
@@ -186,7 +194,11 @@ class PlanRepository(
                 },
             )
         }
-        parsed.destinations.forEach { destination ->
+        insertDestinations(planId, parsed.destinations)
+    }
+
+    private suspend fun insertDestinations(planId: Long, destinations: List<DestinationDraft>) {
+        destinations.forEach { destination ->
             val destinationId = dao.insertDestination(
                 DestinationEntity(
                     name = destination.name,

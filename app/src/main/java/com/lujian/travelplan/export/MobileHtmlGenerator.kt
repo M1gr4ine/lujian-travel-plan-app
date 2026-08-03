@@ -6,6 +6,17 @@ import org.json.JSONObject
 
 object MobileHtmlGenerator {
     fun generate(plan: ParsedPlan): String {
+        val primaryDestination = plan.destinations.firstOrNull()
+        val destinationMeta = primaryDestination?.let { destination ->
+            buildString {
+                append("<meta name=\"lujian:destination\" content=\"")
+                append(escape(destination.name))
+                append("\">")
+                destination.countryCode?.let { append("<meta name=\"lujian:country-code\" content=\"${escape(it)}\">") }
+                destination.latitude?.let { append("<meta name=\"lujian:latitude\" content=\"$it\">") }
+                destination.longitude?.let { append("<meta name=\"lujian:longitude\" content=\"$it\">") }
+            }
+        }.orEmpty()
         val metadata = JSONObject().apply {
             put("schemaVersion", 1)
             put("title", plan.title)
@@ -72,7 +83,7 @@ object MobileHtmlGenerator {
         }
 
         return """<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">$destinationMeta
 <title>${escape(plan.title)}</title>
 <style>
 :root{--paper:#FAF6EF;--ink:#2A2520;--coral:#FF6B4A;--gold:#F2B43A}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:serif;padding:28px 18px 60px}main{max-width:760px;margin:auto}h1{font-size:42px;line-height:1;margin:12px 0 32px}section{margin:0 0 36px}section>header{border-bottom:4px solid var(--ink);margin-bottom:14px}.card{display:grid;grid-template-columns:70px 1fr;gap:14px;border:3px solid var(--ink);border-radius:18px;padding:16px;margin:12px 0;background:#fff;box-shadow:5px 5px 0 var(--gold)}.time{font-weight:900;color:var(--coral)}.tag{font:700 12px sans-serif;background:var(--gold);padding:4px 8px;border:2px solid var(--ink);border-radius:999px}.card h3{margin:8px 0}.card p{white-space:pre-wrap}</style>

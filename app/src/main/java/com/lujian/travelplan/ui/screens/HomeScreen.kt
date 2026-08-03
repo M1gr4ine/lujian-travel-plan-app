@@ -38,6 +38,8 @@ import com.lujian.travelplan.data.StoredPlan
 import com.lujian.travelplan.map.MapViewportMode
 import com.lujian.travelplan.map.MapViewportPolicy
 import com.lujian.travelplan.map.MarkerClusterer
+import com.lujian.travelplan.map.LUJIAN_MAP_STYLE_URL
+import com.lujian.travelplan.map.LujianMapStyle
 import com.lujian.travelplan.ui.components.PaperCard
 import com.lujian.travelplan.ui.theme.Coral
 import com.lujian.travelplan.ui.theme.Ink
@@ -49,8 +51,6 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import org.maplibre.android.annotations.MarkerOptions
-
-private const val OPEN_FREE_MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty"
 
 @Composable
 fun HomeScreen(
@@ -161,6 +161,7 @@ private fun MapLibreSurface(
 
     LaunchedEffect(map, plans, viewport) {
         val currentMap = map ?: return@LaunchedEffect
+        val pinIcon = LujianMapStyle.createPin(context)
         currentMap.markers.toList().forEach { currentMap.removeMarker(it) }
         val entries = plans.flatMap { plan ->
             plan.parsed.destinations
@@ -176,6 +177,7 @@ private fun MapLibreSurface(
             val marker = currentMap.addMarker(
                 MarkerOptions()
                     .position(LatLng(cluster.latitude, cluster.longitude))
+                    .icon(pinIcon)
                     .title(if (clusterPlans.size == 1) clusterPlans.single().parsed.title else "${clusterPlans.size} 份旅行计划")
                     .snippet(cluster.destinations.joinToString(" · ") { it.name }),
             )
@@ -186,8 +188,8 @@ private fun MapLibreSurface(
             true
         }
         currentMap.cameraPosition = CameraPosition.Builder()
-            .target(if (viewport == MapViewportMode.CHINA) LatLng(35.5, 104.0) else LatLng(15.0, 10.0))
-            .zoom(if (viewport == MapViewportMode.CHINA) 3.1 else 1.0)
+            .target(if (viewport == MapViewportMode.CHINA) LatLng(31.5, 104.5) else LatLng(15.0, 10.0))
+            .zoom(if (viewport == MapViewportMode.CHINA) 3.25 else 1.0)
             .build()
     }
 
@@ -195,7 +197,8 @@ private fun MapLibreSurface(
         factory = {
             mapView.apply {
                 getMapAsync { mapLibreMap ->
-                    mapLibreMap.setStyle(Style.Builder().fromUri(OPEN_FREE_MAP_STYLE)) {
+                    mapLibreMap.setStyle(Style.Builder().fromUri(LUJIAN_MAP_STYLE_URL)) { style ->
+                        LujianMapStyle.apply(style)
                         map = mapLibreMap
                         ready = true
                         timedOut = false
