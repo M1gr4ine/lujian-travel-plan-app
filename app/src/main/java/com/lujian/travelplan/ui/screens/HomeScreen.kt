@@ -1,18 +1,26 @@
 package com.lujian.travelplan.ui.screens
 
+import android.content.Context
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
@@ -31,10 +39,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.lujian.travelplan.data.StoredPlan
+import com.lujian.travelplan.map.MapCameraPolicy
 import com.lujian.travelplan.map.MapViewportMode
 import com.lujian.travelplan.map.MapViewportPolicy
 import com.lujian.travelplan.map.MarkerClusterer
@@ -45,8 +55,9 @@ import com.lujian.travelplan.ui.theme.Coral
 import com.lujian.travelplan.ui.theme.Ink
 import com.lujian.travelplan.ui.theme.Paper
 import kotlinx.coroutines.delay
-import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
@@ -58,7 +69,6 @@ fun HomeScreen(
     onOpenPlan: (Long) -> Unit,
 ) {
     var retryKey by remember { mutableIntStateOf(0) }
-    var selectedPlans by remember { mutableStateOf<List<StoredPlan>>(emptyList()) }
     val mappedPlans = remember(plans) {
         plans.flatMap { plan ->
             plan.parsed.destinations
@@ -68,24 +78,7 @@ fun HomeScreen(
     }
     val viewport = MapViewportPolicy.resolve(mappedPlans.map { it.second })
 
-    Box(Modifier.fillMaxSize().background(Paper)) {
-        MapLibreSurface(
-            key = retryKey,
-            plans = plans,
-            viewport = viewport,
-            onSelected = { markerPlans ->
-                if (
-                    markerPlans.size == 1 &&
-                    selectedPlans.map { it.id } == markerPlans.map { it.id }
-                ) {
-                    onOpenPlan(markerPlans.single().id)
-                } else {
-                    selectedPlans = markerPlans
-                }
-            },
-            onRetry = { retryKey++ },
-        )
-
+    Column(Modifier.fillMaxSize().background(Paper)) {
         Column(
             Modifier
                 .statusBarsPadding()
@@ -99,32 +92,27 @@ fun HomeScreen(
             )
         }
 
-        if (selectedPlans.isNotEmpty()) {
-            PaperCard(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(18.dp),
-                background = Paper,
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Ink)
+                    .padding(4.dp)
+                    .clip(RoundedCornerShape(24.dp)),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.LocationOn, contentDescription = null, tint = Coral)
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            if (selectedPlans.size == 1) selectedPlans.single().parsed.title else "这里有 ${selectedPlans.size} 份计划",
-                            style = MaterialTheme.typography.titleLarge,
-                        )
-                        selectedPlans.forEach { plan ->
-                            androidx.compose.material3.TextButton(onClick = { onOpenPlan(plan.id) }) {
-                                Text(plan.parsed.title)
-                            }
-                        }
-                        if (selectedPlans.size == 1) {
-                            Text("再次点击大头针进入计划", style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
+                MapLibreSurface(
+                    key = retryKey,
+                    plans = plans,
+                    viewport = viewport,
+                    onOpenPlan = onOpenPlan,
+                    onRetry = { retryKey++ },
+                )
             }
         }
     }
@@ -135,7 +123,7 @@ private fun MapLibreSurface(
     key: Int,
     plans: List<StoredPlan>,
     viewport: MapViewportMode,
-    onSelected: (List<StoredPlan>) -> Unit,
+    onOpenPlan: (Long) -> Unit,
     onRetry: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -183,14 +171,41 @@ private fun MapLibreSurface(
             )
             markerPlans[marker.id] = clusterPlans
         }
-        currentMap.setOnMarkerClickListener { marker ->
-            markerPlans[marker.id]?.let(onSelected)
-            true
+        currentMap.setInfoWindowAdapter { marker ->
+            markerInfoWindow(context, markerPlans[marker.id].orEmpty(), onOpenPlan)
         }
-        currentMap.cameraPosition = CameraPosition.Builder()
-            .target(if (viewport == MapViewportMode.CHINA) LatLng(31.5, 104.5) else LatLng(15.0, 10.0))
-            .zoom(if (viewport == MapViewportMode.CHINA) 3.25 else 1.0)
-            .build()
+        currentMap.setOnMarkerClickListener { marker ->
+            val plansAtMarker = markerPlans[marker.id].orEmpty()
+            if (marker.isInfoWindowShown && plansAtMarker.size == 1) {
+                onOpenPlan(plansAtMarker.single().id)
+                true
+            } else {
+                false
+            }
+        }
+        currentMap.setOnInfoWindowClickListener { marker ->
+            val plansAtMarker = markerPlans[marker.id].orEmpty()
+            if (plansAtMarker.size == 1) {
+                onOpenPlan(plansAtMarker.single().id)
+                true
+            } else {
+                false
+            }
+        }
+        val cameraBounds = MapCameraPolicy.boundsFor(viewport)
+        val mapBounds = LatLngBounds.from(
+            cameraBounds.north,
+            cameraBounds.east,
+            cameraBounds.south,
+            cameraBounds.west,
+        )
+        val paddingPx = (28 * context.resources.displayMetrics.density).toInt()
+        mapView.post {
+            currentMap.easeCamera(
+                CameraUpdateFactory.newLatLngBounds(mapBounds, paddingPx),
+                420,
+            )
+        }
     }
 
     AndroidView(
@@ -222,6 +237,81 @@ private fun MapLibreSurface(
                     }
                 }
             }
+        }
+    }
+}
+
+private fun markerInfoWindow(
+    context: Context,
+    plans: List<StoredPlan>,
+    onOpenPlan: (Long) -> Unit,
+): LinearLayout {
+    val density = context.resources.displayMetrics.density
+    fun dp(value: Int): Int = (value * density).toInt()
+
+    return LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_HORIZONTAL
+        setPadding(dp(14), dp(10), dp(14), dp(10))
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(14).toFloat()
+            setColor(Color.parseColor("#FAF6EF"))
+            setStroke(dp(3), Color.parseColor("#2A2520"))
+        }
+        elevation = dp(8).toFloat()
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        )
+
+        val title = TextView(context).apply {
+            text = if (plans.size == 1) plans.single().parsed.title else "这里有 ${plans.size} 份计划"
+            setTextColor(Color.parseColor("#2A2520"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            maxWidth = dp(230)
+        }
+        addView(title)
+
+        if (plans.size == 1) {
+            title.setOnClickListener { onOpenPlan(plans.single().id) }
+            addView(TextView(context).apply {
+                text = "再点大头针进入"
+                setTextColor(Color.parseColor("#6B6354"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                gravity = Gravity.CENTER
+                setPadding(0, dp(4), 0, 0)
+            })
+        } else {
+            plans.forEach { plan ->
+                addView(TextView(context).apply {
+                    text = plan.parsed.title
+                    setTextColor(Color.parseColor("#FF6B4A"))
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                    typeface = Typeface.DEFAULT_BOLD
+                    gravity = Gravity.CENTER
+                    maxWidth = dp(230)
+                    setPadding(dp(4), dp(5), dp(4), dp(2))
+                    setOnClickListener { onOpenPlan(plan.id) }
+                })
+            }
+        }
+
+        alpha = 0f
+        scaleX = .92f
+        scaleY = .92f
+        post {
+            pivotX = width / 2f
+            pivotY = height.toFloat()
+            animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(170)
+                .setInterpolator(DecelerateInterpolator())
+                .start()
         }
     }
 }

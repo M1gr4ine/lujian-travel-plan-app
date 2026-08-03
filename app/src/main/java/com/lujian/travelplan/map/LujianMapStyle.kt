@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Path
 import org.maplibre.android.annotations.Icon
 import org.maplibre.android.annotations.IconFactory
 import org.maplibre.android.maps.Style
@@ -33,7 +32,7 @@ object LujianMapStyle {
     private const val GREEN = "#DDE5C9"
     private const val ROAD = "#D9B98D"
     private const val CORAL = "#FF6B4A"
-    private const val GOLD = "#F2B43A"
+    private const val VINTAGE_RED = "#B85F52"
 
     fun apply(style: Style) {
         style.layers.forEach { layer ->
@@ -74,39 +73,37 @@ object LujianMapStyle {
 
     fun createPin(context: Context): Icon {
         val density = context.resources.displayMetrics.density
-        val width = (48 * density).toInt().coerceAtLeast(48)
-        val height = (62 * density).toInt().coerceAtLeast(62)
+        val width = (40 * density).toInt().coerceAtLeast(40)
+        val height = (44 * density).toInt().coerceAtLeast(44)
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val scaleX = width / 48f
-        val scaleY = height / 62f
+        val scaleX = width / 40f
+        val scaleY = height / 44f
         canvas.scale(scaleX, scaleY)
 
-        val pin = Path().apply {
-            moveTo(24f, 58f)
-            cubicTo(20f, 50f, 7f, 39f, 7f, 25f)
-            cubicTo(7f, 14f, 14.6f, 6f, 24f, 6f)
-            cubicTo(33.4f, 6f, 41f, 14f, 41f, 25f)
-            cubicTo(41f, 39f, 28f, 50f, 24f, 58f)
-            close()
-        }
-        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor(CORAL)
+        canvas.drawLine(20f, 20f, 20f, 42f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor(INK)
+            style = Paint.Style.STROKE
+            strokeWidth = 1.8f
+            strokeCap = Paint.Cap.BUTT
+        })
+
+        canvas.drawCircle(21.2f, 14.6f, 11.3f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(42, 42, 37, 32)
             style = Paint.Style.FILL
-        }
-        val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        })
+        canvas.drawCircle(20f, 13.5f, 10.6f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor(VINTAGE_RED)
+            style = Paint.Style.FILL
+        })
+        canvas.drawCircle(20f, 13.5f, 10.6f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor(INK)
             style = Paint.Style.STROKE
-            strokeWidth = 3f
-            strokeJoin = Paint.Join.ROUND
-        }
-        canvas.drawPath(pin, fill)
-        canvas.drawPath(pin, outline)
-        canvas.drawCircle(24f, 24f, 7.5f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor(GOLD) })
-        canvas.drawCircle(24f, 24f, 7.5f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor(INK)
-            style = Paint.Style.STROKE
-            strokeWidth = 2.4f
+            strokeWidth = 2.1f
+        })
+        canvas.drawCircle(16.8f, 10.2f, 2.4f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(180, 250, 246, 239)
+            style = Paint.Style.FILL
         })
         return IconFactory.getInstance(context).fromBitmap(bitmap)
     }

@@ -1,7 +1,32 @@
 package com.lujian.travelplan.ui
 
 import android.net.Uri
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Home
@@ -13,6 +38,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -25,7 +51,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -43,6 +76,10 @@ import com.lujian.travelplan.ui.screens.PlanDetailScreen
 import com.lujian.travelplan.ui.screens.PlanLibraryScreen
 import com.lujian.travelplan.ui.screens.ProfileScreen
 import com.lujian.travelplan.ui.screens.WebPlanScreen
+import com.lujian.travelplan.ui.theme.Gold
+import com.lujian.travelplan.ui.theme.Ink
+import com.lujian.travelplan.ui.theme.Paper
+import com.lujian.travelplan.ui.theme.PaperDeep
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -57,6 +94,8 @@ private enum class RootDestination(
     PROFILE("profile", "我", Icons.Outlined.AccountCircle, Icons.Rounded.AccountCircle),
 }
 
+private val SmoothPageEasing = CubicBezierEasing(.22f, 1f, .36f, 1f)
+
 @Composable
 fun LujianRoot(
     graph: AppGraph,
@@ -69,13 +108,14 @@ fun LujianRoot(
         BrandSplash(reduceMotion, onFinished = { splashDone = true })
         return
     }
-    LujianApp(graph, incomingUri, onIncomingUriHandled)
+    LujianApp(graph, incomingUri, reduceMotion, onIncomingUriHandled)
 }
 
 @Composable
 private fun LujianApp(
     graph: AppGraph,
     incomingUri: StateFlow<Uri?>,
+    reduceMotion: Boolean,
     onIncomingUriHandled: () -> Unit,
 ) {
     val navController = rememberNavController()
@@ -132,21 +172,23 @@ private fun LujianApp(
     Scaffold(
         bottomBar = {
             if (currentRoute in rootRoutes) {
-                NavigationBar {
-                    RootDestination.entries.forEach { destination ->
-                        val selected = currentRoute == destination.route
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = { navController.navigateRoot(destination.route) },
-                            icon = {
-                                Icon(
-                                    if (selected) destination.selectedIcon else destination.icon,
-                                    contentDescription = destination.label,
-                                )
-                            },
-                            label = { Text(destination.label) },
-                        )
-                    }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Paper)
+                        .navigationBarsPadding()
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    RootNavigationBar(
+                        currentRoute = currentRoute,
+                        reduceMotion = reduceMotion,
+                        modifier = Modifier
+                            .fillMaxWidth(.88f)
+                            .clip(RoundedCornerShape(28.dp))
+                            .border(3.dp, Ink, RoundedCornerShape(28.dp)),
+                        onSelect = { navController.navigateRoot(it.route) },
+                    )
                 }
             }
         },
@@ -154,7 +196,79 @@ private fun LujianApp(
         NavHost(
             navController = navController,
             startDestination = RootDestination.HOME.route,
-            modifier = Modifier.padding(padding),
+            modifier = Modifier
+                .padding(padding)
+                .pointerInput(currentRoute) {
+                    val currentIndex = RootDestination.entries.indexOfFirst { it.route == currentRoute }
+                    if (currentIndex < 0) return@pointerInput
+                    val threshold = 56.dp.toPx()
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        var totalX = 0f
+                        var totalY = 0f
+                        var pressed = true
+                        var switched = false
+                        while (pressed && !switched) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            val delta = change.position - change.previousPosition
+                            totalX += delta.x
+                            totalY += delta.y
+                            pressed = change.pressed
+                            if (kotlin.math.abs(totalX) >= threshold &&
+                                kotlin.math.abs(totalX) > kotlin.math.abs(totalY) * 1.25f
+                            ) {
+                                val direction = if (totalX < 0f) 1 else -1
+                                RootTabSwipePolicy.adjacentIndex(
+                                    currentIndex = currentIndex,
+                                    direction = direction,
+                                    count = RootDestination.entries.size,
+                                )?.let { targetIndex ->
+                                    switched = true
+                                    navController.navigateRoot(RootDestination.entries[targetIndex].route)
+                                }
+                            }
+                        }
+                    }
+                },
+            enterTransition = {
+                if (reduceMotion) {
+                    EnterTransition.None
+                } else {
+                    val direction = rootDirection(initialState.destination.route, targetState.destination.route)
+                    fadeIn(tween(220, delayMillis = 20, easing = SmoothPageEasing)) +
+                        slideInHorizontally(tween(320, easing = SmoothPageEasing)) { width ->
+                            direction * width / 4
+                        }
+                }
+            },
+            exitTransition = {
+                if (reduceMotion) {
+                    ExitTransition.None
+                } else {
+                    val direction = rootDirection(initialState.destination.route, targetState.destination.route)
+                    fadeOut(tween(180, easing = SmoothPageEasing)) +
+                        slideOutHorizontally(tween(280, easing = SmoothPageEasing)) { width ->
+                            -direction * width / 6
+                        }
+                }
+            },
+            popEnterTransition = {
+                if (reduceMotion) {
+                    EnterTransition.None
+                } else {
+                    fadeIn(tween(220, delayMillis = 20, easing = SmoothPageEasing)) +
+                        slideInHorizontally(tween(320, easing = SmoothPageEasing)) { width -> -width / 4 }
+                }
+            },
+            popExitTransition = {
+                if (reduceMotion) {
+                    ExitTransition.None
+                } else {
+                    fadeOut(tween(180, easing = SmoothPageEasing)) +
+                        slideOutHorizontally(tween(280, easing = SmoothPageEasing)) { width -> width / 6 }
+                }
+            },
         ) {
             composable(RootDestination.HOME.route) {
                 HomeScreen(plans, onOpenPlan = { navController.navigate("detail/$it") })
@@ -164,6 +278,7 @@ private fun LujianApp(
                     plans = plans,
                     onImport = { uri -> importUri = uri },
                     onOpenPlan = { navController.navigate("detail/$it") },
+                    onDeletePlans = { ids -> scope.launch { graph.repository.deleteAll(ids) } },
                 )
             }
             composable(RootDestination.PROFILE.route) { ProfileScreen(plans) }
@@ -271,6 +386,78 @@ private fun LujianApp(
             },
         )
     }
+}
+
+@Composable
+private fun RootNavigationBar(
+    currentRoute: String?,
+    reduceMotion: Boolean,
+    modifier: Modifier = Modifier,
+    onSelect: (RootDestination) -> Unit,
+) {
+    val selectedIndex = RootDestination.entries.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
+    BoxWithConstraints(modifier = modifier.height(80.dp).background(PaperDeep)) {
+        val itemWidth = maxWidth / RootDestination.entries.size
+        val indicatorWidth = 72.dp
+        val targetX = itemWidth * selectedIndex + (itemWidth - indicatorWidth) / 2
+        val indicatorX by animateDpAsState(
+            targetValue = targetX,
+            animationSpec = if (reduceMotion) tween(0) else spring(dampingRatio = .8f, stiffness = 280f),
+            label = "底栏指示块位置",
+        )
+        Box(
+            Modifier
+                .offset(x = indicatorX, y = 8.dp)
+                .width(indicatorWidth)
+                .height(40.dp)
+                .background(Color(0xFFE8DDF2), RoundedCornerShape(22.dp)),
+        )
+        NavigationBar(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = Color.Transparent,
+            tonalElevation = 0.dp,
+        ) {
+            RootDestination.entries.forEach { destination ->
+                val selected = currentRoute == destination.route
+                val iconScale by animateFloatAsState(
+                    targetValue = if (selected) 1.08f else .96f,
+                    animationSpec = if (reduceMotion) tween(0) else tween(260, easing = SmoothPageEasing),
+                    label = "${destination.label}图标缩放",
+                )
+                NavigationBarItem(
+                    selected = selected,
+                    onClick = { onSelect(destination) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Ink,
+                        selectedTextColor = Gold,
+                        indicatorColor = Color.Transparent,
+                        unselectedIconColor = Ink,
+                        unselectedTextColor = Ink,
+                    ),
+                    icon = {
+                        Crossfade(
+                            targetState = selected,
+                            animationSpec = if (reduceMotion) tween(0) else tween(150),
+                            label = "${destination.label}图标切换",
+                        ) { isSelected ->
+                            Icon(
+                                if (isSelected) destination.selectedIcon else destination.icon,
+                                contentDescription = destination.label,
+                                modifier = Modifier.graphicsLayer { scaleX = iconScale; scaleY = iconScale },
+                            )
+                        }
+                    },
+                    label = { Text(destination.label) },
+                )
+            }
+        }
+    }
+}
+
+private fun rootDirection(initialRoute: String?, targetRoute: String?): Int {
+    val initialIndex = RootDestination.entries.indexOfFirst { it.route == initialRoute }
+    val targetIndex = RootDestination.entries.indexOfFirst { it.route == targetRoute }
+    return if (initialIndex >= 0 && targetIndex >= 0 && targetIndex < initialIndex) -1 else 1
 }
 
 private fun NavHostController.navigateRoot(route: String) {

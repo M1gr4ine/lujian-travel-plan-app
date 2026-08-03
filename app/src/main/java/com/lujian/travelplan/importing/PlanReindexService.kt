@@ -1,6 +1,10 @@
 package com.lujian.travelplan.importing
 
 import android.content.Context
+import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.lujian.travelplan.data.PlanRepository
 import com.lujian.travelplan.parser.CompositePlanParser
 import com.lujian.travelplan.parser.ParseRequest
@@ -16,7 +20,8 @@ class PlanReindexService(
     private val locationResolver = LocationResolver(context)
 
     suspend fun reindexMissingDestinations() = withContext(Dispatchers.IO) {
-        repository.getPlansOnce()
+        val plans = repository.getPlansOnce()
+        plans
             .filter { it.parsed.destinations.isEmpty() }
             .forEach { plan ->
                 runCatching {
@@ -37,6 +42,19 @@ class PlanReindexService(
                     }
                     if (destinations.isNotEmpty()) repository.replaceDestinations(plan.id, destinations)
                 }
+            }
+        plans
+            .filter { it.thumbnailPath?.endsWith("content-thumbnail-v4.png") != true }
+            .forEach { plan ->
+                val input = Data.Builder()
+                    .putLong("planId", plan.id)
+                    .putString("title", plan.parsed.title)
+                    .build()
+                WorkManager.getInstance(context).enqueueUniqueWork(
+                    "content-thumbnail-v4-${plan.id}",
+                    ExistingWorkPolicy.KEEP,
+                    OneTimeWorkRequestBuilder<ThumbnailWorker>().setInputData(input).build(),
+                )
             }
     }
 }

@@ -154,13 +154,22 @@ class PlanRepository(
             insertDestinations(planId, destinations)
         }
 
-    suspend fun delete(planId: Long) = database.withTransaction {
-        val stored = dao.findById(planId) ?: return@withTransaction
-        clearGraph(planId)
-        dao.deletePlan(stored.plan)
-        listOfNotNull(stored.plan.rawPath, stored.plan.generatedPath, stored.plan.thumbnailPath)
-            .map { File(context.filesDir, it) }
-            .forEach { file -> file.delete() }
+    suspend fun delete(planId: Long) = deleteAll(setOf(planId))
+
+    suspend fun deleteAll(planIds: Set<Long>) {
+        val files = database.withTransaction {
+            planIds.mapNotNull { planId -> dao.findById(planId) }
+                .flatMap { stored ->
+                    clearGraph(stored.plan.id)
+                    dao.deletePlan(stored.plan)
+                    listOfNotNull(
+                        stored.plan.rawPath,
+                        stored.plan.generatedPath,
+                        stored.plan.thumbnailPath,
+                    )
+                }
+        }
+        files.map { File(context.filesDir, it) }.forEach { file -> file.delete() }
     }
 
     fun htmlFile(plan: StoredPlan, original: Boolean): File = File(
