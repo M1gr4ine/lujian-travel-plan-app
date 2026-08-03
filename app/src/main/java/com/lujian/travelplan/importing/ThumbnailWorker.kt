@@ -7,6 +7,8 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.view.View
 import android.webkit.WebResourceRequest
@@ -39,7 +41,8 @@ class ThumbnailWorker(
         }
         val customCover = withContext(Dispatchers.IO) { loadCustomCover() }
         val titleCoverHtml = if (html.isBlank()) null else HtmlTitleCoverExtractor.extract(html)
-        val bitmap = customCover ?: withTimeoutOrNull(6_000) {
+        val coverText = if (html.isBlank()) null else HtmlTitleCoverExtractor.extractText(html)
+        val bitmap = customCover ?: coverText?.let(::coverTextThumbnail) ?: withTimeoutOrNull(6_000) {
             titleCoverHtml?.let { renderHtmlFirstScreen(it) }
         } ?: fallbackThumbnail(title)
 
@@ -157,8 +160,85 @@ class ThumbnailWorker(
         return bitmap
     }
 
+    private fun coverTextThumbnail(cover: HtmlTitleCoverExtractor.CoverText): Bitmap {
+        val bitmap = Bitmap.createBitmap(640, 640, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(Color.rgb(250, 246, 239))
+        val ink = Color.rgb(42, 37, 32)
+        val coral = Color.rgb(184, 95, 82)
+        val gold = Color.rgb(242, 180, 58)
+
+        canvas.drawRoundRect(RectF(24f, 22f, 84f, 82f), 18f, 18f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = ink
+        })
+        canvas.drawText("✈", 38f, 63f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = 30f
+            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        })
+        canvas.drawText(cover.brandTitle, 102f, 54f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = ink
+            textSize = 34f
+            typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD)
+        })
+        cover.brandSub?.let { subtitle ->
+            val subtitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.rgb(112, 91, 69)
+                textSize = 19f
+                typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+            }
+            while (subtitlePaint.measureText(subtitle) > 510f && subtitlePaint.textSize > 14f) {
+                subtitlePaint.textSize -= 1f
+            }
+            canvas.drawText(subtitle, 102f, 82f, subtitlePaint)
+        }
+        canvas.drawRect(0f, 122f, 640f, 126f, Paint().apply { color = ink })
+
+        val headlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = ink
+            textSize = 64f
+            typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD)
+        }
+        val lines = cover.headlineLines.flatMap { line -> wrapLine(line, headlinePaint, 584f) }.take(4)
+        val lineHeight = 76f
+        lines.forEachIndexed { index, line ->
+            canvas.drawText(line, 28f, 224f + index * lineHeight, headlinePaint)
+        }
+        if (lines.isNotEmpty()) {
+            val y = 247f + (lines.lastIndex * lineHeight)
+            val wave = Path().apply {
+                moveTo(270f, y)
+                cubicTo(285f, y - 9f, 300f, y + 9f, 315f, y)
+                cubicTo(330f, y - 9f, 345f, y + 9f, 360f, y)
+                cubicTo(375f, y - 9f, 390f, y + 9f, 405f, y)
+            }
+            canvas.drawPath(wave, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = gold
+                style = Paint.Style.STROKE
+                strokeWidth = 5f
+                strokeCap = Paint.Cap.ROUND
+            })
+        }
+        canvas.drawCircle(604f, 604f, 7f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = coral })
+        return bitmap
+    }
+
+    private fun wrapLine(text: String, paint: Paint, maxWidth: Float): List<String> {
+        if (paint.measureText(text) <= maxWidth) return listOf(text)
+        val lines = mutableListOf<String>()
+        var start = 0
+        while (start < text.length) {
+            var end = start + 1
+            while (end <= text.length && paint.measureText(text.substring(start, end)) <= maxWidth) end++
+            val safeEnd = (end - 1).coerceAtLeast(start + 1)
+            lines += text.substring(start, safeEnd)
+            start = safeEnd
+        }
+        return lines
+    }
+
     companion object {
         const val INPUT_CUSTOM_COVER_PATH = "customCoverPath"
-        const val OUTPUT_FILE_NAME = "content-thumbnail-v5.png"
+        const val OUTPUT_FILE_NAME = "content-thumbnail-v7.png"
     }
 }

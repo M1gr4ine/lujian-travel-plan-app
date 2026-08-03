@@ -2,10 +2,12 @@ package com.lujian.travelplan.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
 import com.lujian.travelplan.data.StoredPlan
 import com.lujian.travelplan.model.ParsedPlan
 import com.lujian.travelplan.model.PlanCapability
@@ -31,6 +33,35 @@ class LujianUiTest {
 
         composeRule.onNodeWithText("添加计划").assertIsDisplayed()
         composeRule.onNodeWithText("选择 HTML 文件").assertIsDisplayed()
+    }
+
+    @Test
+    fun 计划库使用可整体点击的折角便签() {
+        val plan = StoredPlan(
+            id = 7,
+            parsed = ParsedPlan(
+                title = "大连旅行计划",
+                capability = PlanCapability.ENHANCED,
+                days = listOf(PlanDayDraft("d1", "9月24日", "海边散步", emptyList())),
+            ),
+            sourceFileName = "dalian.html",
+            rawPath = "dalian.html",
+            generatedPath = null,
+            thumbnailPath = null,
+            compatibilityMode = false,
+            updatedAt = 1,
+        )
+        var openedId: Long? = null
+        composeRule.setContent {
+            LujianTheme {
+                PlanLibraryScreen(listOf(plan), onImport = {}, onOpenPlan = { openedId = it })
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("大连旅行计划折角便签")
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.runOnIdle { check(openedId == 7L) }
     }
 
     @Test
@@ -61,7 +92,21 @@ class LujianUiTest {
         composeRule.onNodeWithText("行程总预算").assertIsDisplayed()
         composeRule.onNodeWithText("¥3,000").assertIsDisplayed()
 
+        composeRule.onNodeWithText("🗺️ 每日地图").performClick()
+        composeRule.onNodeWithText("9月2日").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("第二天").assertIsDisplayed()
+        composeRule.onNodeWithText("第二天内容").assertIsDisplayed()
+        composeRule.onNodeWithText("第二天内容").performTouchInput { swipeRight() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("第一天内容").assertIsDisplayed()
+        composeRule.onNodeWithText("第一天内容").performTouchInput { swipeLeft() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("第二天内容").assertIsDisplayed()
+
         composeRule.onNodeWithText("🗓️ 行程").performClick()
+        composeRule.onNodeWithText("第二天内容").assertIsDisplayed()
+        composeRule.onNodeWithText("9月1日").performClick()
         composeRule.onNodeWithText("第一天内容").assertIsDisplayed().performClick()
         composeRule.onNodeWithText("🗺️ 在每日地图中查看").assertIsDisplayed()
         composeRule.onNodeWithText("🏖️ attraction").assertIsDisplayed()

@@ -80,22 +80,28 @@ class LujianJsonParser : PlanParser {
             }
         }.orEmpty()
 
+        val legacyCoordinates = LegacyMapCoordinateExtractor.extract(request.html, days)
+
         val places = root.optJSONArray("places")?.let { array ->
             List(array.length()) { index -> array.optJSONObject(index) }
                 .filterNotNull()
                 .mapIndexed { index, place ->
                     val coordinates = place.optJSONObject("coordinates")
+                    val id = place.optString("id", "place-$index")
+                    val legacyCoordinate = legacyCoordinates[id]
                     PlanPlaceDraft(
-                        id = place.optString("id", "place-$index"),
+                        id = id,
                         name = place.optString("name"),
                         address = place.optNullableString("address"),
                         latitude = place.optLatitude("latitude")
                             ?: coordinates?.optLatitude("latitude")
-                            ?: coordinates?.optLatitude("lat"),
+                            ?: coordinates?.optLatitude("lat")
+                            ?: legacyCoordinate?.latitude,
                         longitude = place.optLongitude("longitude")
                             ?: coordinates?.optLongitude("longitude")
                             ?: coordinates?.optLongitude("lng")
-                            ?: coordinates?.optLongitude("lon"),
+                            ?: coordinates?.optLongitude("lon")
+                            ?: legacyCoordinate?.longitude,
                         mapLinks = place.optMapLinks(),
                     )
                 }
@@ -124,7 +130,10 @@ class LujianJsonParser : PlanParser {
         }
 
         return ParsedPlan(
-            title = root.optString("title").ifBlank { document.title().ifBlank { request.fileName } },
+            title = extractPageDisplayTitle(document)
+                .ifBlank { root.optString("title") }
+                .ifBlank { document.title() }
+                .ifBlank { request.fileName },
             capability = PlanCapability.ENHANCED,
             destinations = destinations,
             days = days,
@@ -144,6 +153,115 @@ class LujianJsonParser : PlanParser {
         )
     }
 }
+
+private data class LegacyMapCoordinate(
+    val latitude: Double,
+    val longitude: Double,
+)
+
+private data class LegacyMapPoint(
+    val name: String,
+    val latitude: Double,
+    val longitude: Double,
+    val kind: String?,
+)
+
+private data class LinkedPlanPlace(
+    val dayId: String,
+    val title: String,
+    val category: String?,
+)
+
+private object LegacyMapCoordinateExtractor {
+    private const val MARKER = "LIVE_MAP_DATA_START"
+    private val dayPattern = Regex(
+        """['\"](day-\d+)['\"]\s*:\s*\{[\s\S]*?points\s*:\s*\[([\s\S]*?)]\s*,\s*routes\s*:""",
+    )
+    private val pointPattern = Regex("""\{([^{}]*?coord\s*:\s*\[[^\]]+\][^{}]*?)\}""")
+    private val namePattern = Regex("""name\s*:\s*(['\"])(.*?)\1""")
+    private val kindPattern = Regex("""kind\s*:\s*(['\"])(.*?)\1""")
+    private val coordinatePattern = Regex(
+        """coord\s*:\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]""",
+    )
+
+    fun extract(html: String, days: List<PlanDayDraft>): Map<String, LegacyMapCoordinate> {
+        val markedContent = html.substringAfter(MARKER, missingDelimiterValue = "")
+        if (markedContent.isBlank()) return emptyMap()
+        val pointsByDay = dayPattern.findAll(markedContent).associate { dayMatch ->
+            dayMatch.groupValues[1] to pointPattern.findAll(dayMatch.groupValues[2]).mapNotNull(::parsePoint).toList()
+        }
+        if (pointsByDay.isEmpty()) return emptyMap()
+
+        val linkedPlaces = days.flatMap { day ->
+            day.items.mapNotNull { item ->
+                item.placeId?.takeIf(String::isNotBlank)?.let { placeId ->
+                    placeId to LinkedPlanPlace(day.id, item.title, item.category)
+                }
+            }
+        }.toMap()
+
+        return linkedPlaces.mapNotNull { (placeId, linked) ->
+            val point = selectPoint(linked, pointsByDay[linked.dayId].orEmpty()) ?: return@mapNotNull null
+            placeId to LegacyMapCoordinate(point.latitude, point.longitude)
+        }.toMap()
+    }
+
+    private fun parsePoint(match: MatchResult): LegacyMapPoint? {
+        val body = match.groupValues[1]
+        val name = namePattern.find(body)?.groupValues?.get(2)?.takeIf(String::isNotBlank) ?: return null
+        val coordinate = coordinatePattern.find(body) ?: return null
+        val longitude = coordinate.groupValues[1].toDoubleOrNull()?.takeIf { it in -180.0..180.0 } ?: return null
+        val latitude = coordinate.groupValues[2].toDoubleOrNull()?.takeIf { it in -90.0..90.0 } ?: return null
+        return LegacyMapPoint(
+            name = name,
+            latitude = latitude,
+            longitude = longitude,
+            kind = kindPattern.find(body)?.groupValues?.get(2),
+        )
+    }
+
+    private fun selectPoint(linked: LinkedPlanPlace, points: List<LegacyMapPoint>): LegacyMapPoint? {
+        if (points.isEmpty()) return null
+        val isHotel = linked.category.equals("hotel", ignoreCase = true) || "酒店" in linked.title
+        if (isHotel) points.firstOrNull { it.kind.equals("hotel", ignoreCase = true) }?.let { return it }
+
+        val target = normalize(linked.title)
+        return points.mapIndexedNotNull { index, point ->
+            val match = matchPosition(target, normalize(point.name)) ?: return@mapIndexedNotNull null
+            Triple(point, match, index)
+        }.minWithOrNull(
+            compareBy<Triple<LegacyMapPoint, Pair<Int, Int>, Int>> { it.second.first }
+                .thenByDescending { it.second.second }
+                .thenBy { it.third },
+        )?.first
+    }
+
+    private fun matchPosition(target: String, candidate: String): Pair<Int, Int>? {
+        if (target.isBlank() || candidate.isBlank()) return null
+        target.indexOf(candidate).takeIf { it >= 0 }?.let { return it to candidate.length }
+        candidate.indexOf(target).takeIf { it >= 0 }?.let { return 0 to target.length }
+        for (length in minOf(target.length, candidate.length) downTo 3) {
+            val matches = (0..candidate.length - length).mapNotNull { start ->
+                val fragment = candidate.substring(start, start + length)
+                target.indexOf(fragment).takeIf { it >= 0 }
+            }
+            if (matches.isNotEmpty()) return matches.min() to length
+        }
+        return null
+    }
+
+    private fun normalize(value: String): String = value.lowercase().filter(Char::isLetterOrDigit)
+}
+
+private fun extractPageDisplayTitle(document: org.jsoup.nodes.Document): String =
+    sequenceOf(
+        "[data-lujian-cover] .brand-title",
+        "[data-lujian-cover] .logo-title",
+        ".logo-title",
+        "#mobile-brand-title",
+    ).mapNotNull { selector -> document.selectFirst(selector)?.text()?.trim() }
+        .firstOrNull(String::isNotBlank)
+        .orEmpty()
 
 class DalianTemplateParser : PlanParser {
     override fun parse(request: ParseRequest): ParsedPlan? {

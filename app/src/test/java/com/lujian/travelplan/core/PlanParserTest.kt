@@ -71,6 +71,67 @@ class PlanParserTest {
     }
 
     @Test
+    fun `旧版桌面计划优先使用品牌标题并接入内嵌每日地图坐标`() {
+        val html = """
+            <html><head><title>大连旅行计划 · 9月25–29日</title></head><body>
+            <div class="logo-block">
+              <div class="logo-title">大连旅行计划</div>
+              <div class="logo-sub">9月24日晚出发 · 5天4晚 · SOLO TRIP</div>
+            </div>
+            <div class="hero"><h1>五天说走就走，<br>把大连吃个痛快。</h1></div>
+            <script id="lujian-plan" type="application/json">
+            {
+              "schemaVersion":1,
+              "title":"大连 5天4晚旅行计划",
+              "destinations":["大连"],
+              "places":[
+                {"id":"place-d1-0","name":"酒店早餐"},
+                {"id":"place-d1-1","name":"东关街慢拍"},
+                {"id":"place-d1-2","name":"中山广场—南山散步"},
+                {"id":"place-d2-0","name":"海之韵—晨曦沙滩—棒棰岛"}
+              ],
+              "days":[
+                {"id":"day-1","label":"9月25日 周三","title":"老城美食","items":[
+                  {"id":"d1-0","time":"08:30","title":"酒店早餐","category":"hotel","notes":"","placeId":"place-d1-0"},
+                  {"id":"d1-1","time":"10:00","title":"东关街慢拍","category":"attraction","notes":"","placeId":"place-d1-1"},
+                  {"id":"d1-2","time":"14:30","title":"中山广场—南山散步","category":"attraction","notes":"","placeId":"place-d1-2"}
+                ]},
+                {"id":"day-2","label":"9月26日 周四","title":"滨海精华","items":[
+                  {"id":"d2-0","time":"08:00","title":"海之韵—晨曦沙滩—棒棰岛","category":"attraction","notes":"","placeId":"place-d2-0"}
+                ]}
+              ]
+            }
+            </script>
+            <script>
+            /* LIVE_MAP_DATA_START */
+            const LIVE_MAP_DAYS = Object.freeze({
+              'day-1': { points:[
+                {id:'hotel',name:'亚朵X酒店',coord:[121.5875,38.9150],kind:'hotel'},
+                {id:'dongguan',name:'东关街',coord:[121.6551,38.9290]},
+                {id:'zhongshan',name:'中山广场',coord:[121.6470,38.9165]},
+                {id:'nanshan',name:'南山风情街',coord:[121.6604,38.9148]}
+              ], routes:[] },
+              'day-2': { points:[
+                {id:'hai',name:'海之韵公园',coord:[121.7260,38.9200]},
+                {id:'chenxi',name:'晨曦沙滩',coord:[121.7330,38.9110]},
+                {id:'bangchui',name:'棒棰岛',coord:[121.7350,38.8860]}
+              ], routes:[] }
+            });
+            </script>
+            </body></html>
+        """.trimIndent()
+
+        val result = LujianJsonParser().parse(ParseRequest("大连.html", "text/html", html))!!
+        val places = result.places.associateBy { it.id }
+
+        assertEquals("大连旅行计划", result.title)
+        assertEquals(38.9150, places.getValue("place-d1-0").latitude!!, 0.0001)
+        assertEquals(121.6551, places.getValue("place-d1-1").longitude!!, 0.0001)
+        assertEquals(121.6470, places.getValue("place-d1-2").longitude!!, 0.0001)
+        assertEquals(121.7260, places.getValue("place-d2-0").longitude!!, 0.0001)
+    }
+
+    @Test
     fun `旅笺越界坐标不会进入原生地图`() {
         val html = """
             <html><body><script id="lujian-plan" type="application/json">

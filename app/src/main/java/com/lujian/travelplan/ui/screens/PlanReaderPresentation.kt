@@ -21,6 +21,21 @@ enum class PlanReaderPage(val label: String) {
     BUDGET("💰 预算"),
 }
 
+data class PlanReaderDayAction(
+    val selectedIndex: Int,
+    val pagerTarget: Int?,
+)
+
+object PlanReaderDayPolicy {
+    fun select(requestedIndex: Int, dayCount: Int, activePage: PlanReaderPage): PlanReaderDayAction {
+        val selected = requestedIndex.coerceIn(0, (dayCount - 1).coerceAtLeast(0))
+        return PlanReaderDayAction(
+            selectedIndex = selected,
+            pagerTarget = selected.takeIf { activePage != PlanReaderPage.BUDGET },
+        )
+    }
+}
+
 object PlanReaderPresentation {
     fun categoryLabel(category: String?): String {
         val label = category?.trim().orEmpty().ifBlank { "其他" }

@@ -37,7 +37,7 @@ data class StoredPlan(
     val updatedAt: Long,
 )
 
-const val CURRENT_PLAN_DATA_REVISION = 2
+const val CURRENT_PLAN_DATA_REVISION = 4
 
 data class ImportedPlanFiles(
     val sourceFileName: String,

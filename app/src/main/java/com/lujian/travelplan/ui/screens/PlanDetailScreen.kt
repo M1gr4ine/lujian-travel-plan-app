@@ -54,9 +54,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,7 +75,9 @@ import com.lujian.travelplan.model.PlanDayDraft
 import com.lujian.travelplan.model.PlanItemDraft
 import com.lujian.travelplan.model.ParsedPlan
 import com.lujian.travelplan.model.PlanSectionDraft
+import com.lujian.travelplan.ui.PlanSharedTransitionScopes
 import com.lujian.travelplan.ui.components.PaperCard
+import com.lujian.travelplan.ui.planSharedBounds
 import com.lujian.travelplan.ui.theme.Coral
 import com.lujian.travelplan.ui.theme.Gold
 import com.lujian.travelplan.ui.theme.Ink
@@ -92,6 +96,8 @@ fun PlanDetailScreen(
     onEdit: () -> Unit,
     onViewHtml: (Boolean) -> Unit,
     onDeleted: () -> Unit,
+    transitionScopes: PlanSharedTransitionScopes? = null,
+    sharedBoundsEnabled: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -116,6 +122,9 @@ fun PlanDetailScreen(
     }
 
     Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .planSharedBounds(plan.id, transitionScopes, sharedBoundsEnabled),
         topBar = {
             TopAppBar(
                 title = {
@@ -201,9 +210,23 @@ internal fun NativePlanReader(plan: StoredPlan, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     var activePage by remember { mutableStateOf(PlanReaderPage.ITINERARY) }
     var focusedItemId by remember { mutableStateOf<String?>(null) }
+    var selectedDayIndex by rememberSaveable { mutableIntStateOf(0) }
+    var lastPagerPage by remember { mutableIntStateOf(pagerState.currentPage) }
 
     LaunchedEffect(pagerState.currentPage) {
-        dateListState.animateScrollToItem(pagerState.currentPage)
+        if (pagerState.currentPage != lastPagerPage) focusedItemId = null
+        lastPagerPage = pagerState.currentPage
+        selectedDayIndex = pagerState.currentPage
+    }
+
+    LaunchedEffect(selectedDayIndex) {
+        dateListState.animateScrollToItem(selectedDayIndex)
+    }
+
+    LaunchedEffect(activePage) {
+        if (activePage != PlanReaderPage.BUDGET && pagerState.currentPage != selectedDayIndex) {
+            pagerState.scrollToPage(selectedDayIndex)
+        }
     }
 
     Column(modifier.fillMaxSize().background(Paper)) {
@@ -227,13 +250,17 @@ internal fun NativePlanReader(plan: StoredPlan, modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth().background(Paper),
             ) {
                 itemsIndexed(days, key = { _, day -> day.id }) { index, day ->
-                    val selected = index == pagerState.currentPage
+                    val selected = index == selectedDayIndex
                     Column(
                         Modifier
                             .background(if (selected) Coral else Color.Transparent, RoundedCornerShape(14.dp))
                             .clickable {
                                 focusedItemId = null
-                                scope.launch { pagerState.animateScrollToPage(index) }
+                                val action = PlanReaderDayPolicy.select(index, days.size, activePage)
+                                selectedDayIndex = action.selectedIndex
+                                action.pagerTarget?.let { target ->
+                                    scope.launch { pagerState.animateScrollToPage(target) }
+                                }
                             }
                             .padding(horizontal = 18.dp, vertical = 10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -251,17 +278,20 @@ internal fun NativePlanReader(plan: StoredPlan, modifier: Modifier = Modifier) {
                     day = days[page],
                     sections = if (page == days.lastIndex) plan.parsed.sections else emptyList(),
                     onShowMap = { itemId ->
+                        selectedDayIndex = page
                         focusedItemId = itemId
                         activePage = PlanReaderPage.MAP
                     },
                 )
             }
-            PlanReaderPage.MAP -> DailyMapPage(
-                plan = plan.parsed,
-                day = days[pagerState.currentPage],
-                focusedItemId = focusedItemId,
-                modifier = Modifier.fillMaxSize(),
-            )
+            PlanReaderPage.MAP -> HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                DailyMapPage(
+                    plan = plan.parsed,
+                    day = days[page],
+                    focusedItemId = focusedItemId,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
             PlanReaderPage.BUDGET -> BudgetPage(plan.parsed, Modifier.fillMaxSize())
         }
     }

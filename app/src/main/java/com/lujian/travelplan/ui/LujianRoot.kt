@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
+
 package com.lujian.travelplan.ui
 
 import android.net.Uri
@@ -8,6 +10,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -193,6 +196,7 @@ private fun LujianApp(
             }
         },
     ) { padding ->
+        SharedTransitionLayout {
         NavHost(
             navController = navController,
             startDestination = RootDestination.HOME.route,
@@ -232,7 +236,7 @@ private fun LujianApp(
                     }
                 },
             enterTransition = {
-                if (reduceMotion) {
+                if (reduceMotion || isLibraryDetailTransition(initialState.destination.route, targetState.destination.route)) {
                     EnterTransition.None
                 } else {
                     val direction = rootDirection(initialState.destination.route, targetState.destination.route)
@@ -243,7 +247,7 @@ private fun LujianApp(
                 }
             },
             exitTransition = {
-                if (reduceMotion) {
+                if (reduceMotion || isLibraryDetailTransition(initialState.destination.route, targetState.destination.route)) {
                     ExitTransition.None
                 } else {
                     val direction = rootDirection(initialState.destination.route, targetState.destination.route)
@@ -254,7 +258,7 @@ private fun LujianApp(
                 }
             },
             popEnterTransition = {
-                if (reduceMotion) {
+                if (reduceMotion || isLibraryDetailTransition(initialState.destination.route, targetState.destination.route)) {
                     EnterTransition.None
                 } else {
                     fadeIn(tween(220, delayMillis = 20, easing = SmoothPageEasing)) +
@@ -262,7 +266,7 @@ private fun LujianApp(
                 }
             },
             popExitTransition = {
-                if (reduceMotion) {
+                if (reduceMotion || isLibraryDetailTransition(initialState.destination.route, targetState.destination.route)) {
                     ExitTransition.None
                 } else {
                     fadeOut(tween(180, easing = SmoothPageEasing)) +
@@ -277,8 +281,12 @@ private fun LujianApp(
                 PlanLibraryScreen(
                     plans = plans,
                     onImport = { uri -> importUri = uri },
-                    onOpenPlan = { navController.navigate("detail/$it") },
+                    onOpenPlan = { planId ->
+                        navController.navigate("detail/$planId") { launchSingleTop = true }
+                    },
                     onDeletePlans = { ids -> scope.launch { graph.repository.deleteAll(ids) } },
+                    transitionScopes = PlanSharedTransitionScopes(this@SharedTransitionLayout, this),
+                    sharedBoundsEnabled = !reduceMotion,
                 )
             }
             composable(RootDestination.PROFILE.route) { ProfileScreen(plans) }
@@ -286,6 +294,10 @@ private fun LujianApp(
                 val planId = entry.arguments?.getString("planId")?.toLongOrNull()
                 val plan = plans.firstOrNull { it.id == planId }
                 if (plan != null) {
+                    val useSharedBounds = PlanNoteTransitionPolicy.useSharedBounds(
+                        fromRoute = navController.previousBackStackEntry?.destination?.route,
+                        reduceMotion = reduceMotion,
+                    )
                     PlanDetailScreen(
                         plan = plan,
                         repository = graph.repository,
@@ -296,6 +308,8 @@ private fun LujianApp(
                             navController.popBackStack()
                             navController.navigateRoot(RootDestination.LIBRARY.route)
                         },
+                        transitionScopes = PlanSharedTransitionScopes(this@SharedTransitionLayout, this),
+                        sharedBoundsEnabled = useSharedBounds,
                     )
                 }
             }
@@ -321,6 +335,7 @@ private fun LujianApp(
                     LocationPickerScreen(plan, graph.repository) { navController.popBackStack() }
                 }
             }
+        }
         }
     }
 
@@ -459,6 +474,10 @@ private fun rootDirection(initialRoute: String?, targetRoute: String?): Int {
     val targetIndex = RootDestination.entries.indexOfFirst { it.route == targetRoute }
     return if (initialIndex >= 0 && targetIndex >= 0 && targetIndex < initialIndex) -1 else 1
 }
+
+private fun isLibraryDetailTransition(initialRoute: String?, targetRoute: String?): Boolean =
+    (initialRoute == RootDestination.LIBRARY.route && targetRoute == "detail/{planId}") ||
+        (initialRoute == "detail/{planId}" && targetRoute == RootDestination.LIBRARY.route)
 
 private fun NavHostController.navigateRoot(route: String) {
     navigate(route) {
