@@ -1,6 +1,6 @@
 package com.lujian.travelplan.ui.screens
 
-import android.graphics.BitmapFactory
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -42,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,13 +51,17 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lujian.travelplan.data.StoredPlan
 import com.lujian.travelplan.model.PlanCapability
-import com.lujian.travelplan.ui.components.PaperCard
+import com.lujian.travelplan.ui.PlanSharedTransitionScopes
 import com.lujian.travelplan.ui.components.dashedPaperBorder
+import com.lujian.travelplan.ui.components.foldedNoteDecoration
+import com.lujian.travelplan.ui.planSharedBounds
 import com.lujian.travelplan.ui.theme.Coral
 import com.lujian.travelplan.ui.theme.Ink
 import com.lujian.travelplan.ui.theme.Paper
@@ -69,6 +74,8 @@ fun PlanLibraryScreen(
     onImport: (Uri) -> Unit,
     onOpenPlan: (Long) -> Unit,
     onDeletePlans: (Set<Long>) -> Unit = {},
+    transitionScopes: PlanSharedTransitionScopes? = null,
+    sharedBoundsEnabled: Boolean = false,
 ) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(onImport)
@@ -143,6 +150,8 @@ fun PlanLibraryScreen(
                     plan = plan,
                     managing = managing,
                     selected = plan.id in selectedIds,
+                    transitionScopes = transitionScopes,
+                    sharedBoundsEnabled = sharedBoundsEnabled,
                     onClick = {
                         if (managing) {
                             selectedIds = PlanSelectionPolicy.toggle(selectedIds, plan.id)
@@ -198,11 +207,13 @@ private fun PlanPreviewCard(
     plan: StoredPlan,
     managing: Boolean,
     selected: Boolean,
+    transitionScopes: PlanSharedTransitionScopes?,
+    sharedBoundsEnabled: Boolean,
     onClick: () -> Unit,
 ) {
     val context = LocalContext.current
-    val bitmap = remember(plan.thumbnailPath) {
-        plan.thumbnailPath?.let { BitmapFactory.decodeFile(File(context.filesDir, it).absolutePath) }
+    val bitmap by produceState<Bitmap?>(initialValue = null, key1 = plan.thumbnailPath) {
+        value = plan.thumbnailPath?.let { PlanThumbnailLoader.decode(File(context.filesDir, it)) }
     }
     val scale by animateFloatAsState(if (selected) .96f else 1f, label = "计划卡选择缩放")
     val destination = plan.parsed.destinations.joinToString(" · ") { it.name }.ifBlank { "未设置目的地" }
@@ -215,41 +226,50 @@ private fun PlanPreviewCard(
     Column(
         modifier = Modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
+            .semantics(mergeDescendants = true) {
+                contentDescription = "${plan.parsed.title}折角便签"
+            }
             .clickable(onClick = onClick),
     ) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
-            PaperCard(
-                modifier = Modifier.fillMaxSize(),
-                background = PaperDeep,
-                contentPadding = PaddingValues(0.dp),
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .planSharedBounds(plan.id, transitionScopes, sharedBoundsEnabled)
+                .foldedNoteDecoration(
+                    background = PaperDeep,
+                    borderColor = if (selected) Coral else Ink,
+                    borderWidth = if (selected) 4.dp else 3.dp,
+                )
+                .padding(7.dp),
+        ) {
+            Box(
+                Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)).background(Paper),
+                contentAlignment = Alignment.Center,
             ) {
-                Box(
-                    Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (bitmap != null) {
-                        Image(
-                            bitmap.asImageBitmap(),
-                            contentDescription = "${plan.parsed.title}内容缩略图",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        Icon(
-                            if (plan.parsed.capability == PlanCapability.ENHANCED) Icons.Filled.Map else Icons.Filled.Description,
-                            contentDescription = null,
-                            tint = Coral,
-                            modifier = Modifier.size(42.dp),
-                        )
-                    }
+                val currentBitmap = bitmap
+                if (currentBitmap != null) {
+                    Image(
+                        currentBitmap.asImageBitmap(),
+                        contentDescription = "${plan.parsed.title}内容缩略图",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Icon(
+                        if (plan.parsed.capability == PlanCapability.ENHANCED) Icons.Filled.Map else Icons.Filled.Description,
+                        contentDescription = null,
+                        tint = Coral,
+                        modifier = Modifier.size(42.dp),
+                    )
                 }
             }
 
             if (managing) {
                 Box(
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 8.dp, end = 8.dp)
+                        .align(Alignment.TopStart)
+                        .padding(top = 8.dp, start = 8.dp)
                         .size(24.dp)
                         .background(if (selected) Coral else Paper, RoundedCornerShape(8.dp))
                         .border(2.dp, Ink, RoundedCornerShape(8.dp)),
@@ -257,9 +277,6 @@ private fun PlanPreviewCard(
                 ) {
                     SelectionCheck(visible = selected)
                 }
-            }
-            if (selected) {
-                Box(Modifier.matchParentSize().border(4.dp, Coral, RoundedCornerShape(18.dp)))
             }
         }
         Column(

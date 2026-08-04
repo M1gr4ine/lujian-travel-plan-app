@@ -2,16 +2,15 @@
 
 package com.lujian.travelplan.ui.screens
 
-import android.os.Bundle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -20,7 +19,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,9 +32,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.lujian.travelplan.data.PlanRepository
 import com.lujian.travelplan.data.StoredPlan
 import com.lujian.travelplan.importing.LocationCandidate
-import com.lujian.travelplan.map.LUJIAN_MAP_STYLE_URL
 import com.lujian.travelplan.map.LujianMapStyle
 import com.lujian.travelplan.ui.components.PaperCard
+import com.lujian.travelplan.ui.components.LujianPinMark
+import com.lujian.travelplan.ui.components.rememberLujianMapView
 import com.lujian.travelplan.ui.theme.Coral
 import com.lujian.travelplan.ui.theme.Paper
 import kotlinx.coroutines.launch
@@ -52,22 +51,12 @@ fun LocationPickerScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val mapView = remember { MapView(context).apply { onCreate(Bundle()) } }
+    val mapView = rememberLujianMapView()
     var selected by remember { mutableStateOf<LatLng?>(null) }
     val scope = rememberCoroutineScope()
     val destinationName = plan.parsed.destinations.firstOrNull { it.latitude == null || it.longitude == null }?.name
         ?: plan.parsed.destinations.firstOrNull()?.name
         ?: "目的地"
-
-    DisposableEffect(mapView) {
-        mapView.onStart()
-        mapView.onResume()
-        onDispose {
-            mapView.onPause()
-            mapView.onStop()
-            mapView.onDestroy()
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -84,7 +73,7 @@ fun LocationPickerScreen(
                 factory = {
                     mapView.apply {
                         getMapAsync { map ->
-                            map.setStyle(Style.Builder().fromUri(LUJIAN_MAP_STYLE_URL)) { style ->
+                            map.setStyle(LujianMapStyle.styleBuilder(context)) { style ->
                                 LujianMapStyle.apply(style)
                                 map.cameraPosition = CameraPosition.Builder().target(LatLng(31.5, 104.5)).zoom(3.25).build()
                                 map.addOnMapClickListener { point -> selected = point; true }
@@ -98,7 +87,7 @@ fun LocationPickerScreen(
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp),
             ) {
                 Column {
-                    Icon(Icons.Filled.LocationOn, contentDescription = null, tint = Coral)
+                    LujianPinMark(Modifier.fillMaxWidth().height(34.dp).padding(vertical = 4.dp))
                     Text(
                         selected?.let { "已选 ${"%.4f".format(it.latitude)}, ${"%.4f".format(it.longitude)}" }
                             ?: "在地图上点击目的地位置",

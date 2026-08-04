@@ -5,6 +5,8 @@ import com.lujian.travelplan.model.ParsedPlan
 import com.lujian.travelplan.model.PlanCapability
 import com.lujian.travelplan.model.PlanDayDraft
 import com.lujian.travelplan.model.PlanItemDraft
+import com.lujian.travelplan.model.PlanMapLinks
+import com.lujian.travelplan.model.PlanPlaceDraft
 import com.lujian.travelplan.model.PlanSectionDraft
 import org.json.JSONObject
 import org.jsoup.Jsoup
@@ -22,20 +24,29 @@ fun interface PlanParser {
 class LujianJsonParser : PlanParser {
     override fun parse(request: ParseRequest): ParsedPlan? {
         val document = Jsoup.parse(request.html)
-        val script = document.selectFirst("script#lujian-plan[type=application/json]") ?: return null
-        val root = JSONObject(script.data().ifBlank { script.html() })
-        if (root.optInt("schemaVersion", -1) != 1) return null
+        val root = when (val detection = LujianHtmlContract.inspect(request.html)) {
+            is LujianHtmlDetection.Compatible -> detection.payload
+            LujianHtmlDetection.Absent,
+            is LujianHtmlDetection.Incompatible,
+            -> return null
+        }
 
         val destinations = root.optJSONArray("destinations")?.let { array ->
-            List(array.length()) { index ->
-                val item = array.getJSONObject(index)
-                DestinationDraft(
-                    name = item.optString("name"),
-                    countryCode = item.optNullableString("countryCode"),
-                    latitude = item.optNullableDouble("latitude"),
-                    longitude = item.optNullableDouble("longitude"),
-                )
-            }
+            List(array.length()) { index -> array.opt(index) }
+                .mapNotNull { item ->
+                    when (item) {
+                        is JSONObject -> DestinationDraft(
+                            name = item.optString("name"),
+                            countryCode = item.optNullableString("countryCode"),
+                            latitude = item.optLatitude("latitude"),
+                            longitude = item.optLongitude("longitude"),
+                        )
+                        is String -> item.takeIf { it.isNotBlank() }?.let {
+                            DestinationDraft(it, null, null, null)
+                        }
+                        else -> null
+                    }
+                }
         }.orEmpty()
 
         val days = root.optJSONArray("days")?.let { array ->
@@ -51,6 +62,9 @@ class LujianJsonParser : PlanParser {
                             category = item.optNullableString("category"),
                             cost = item.optNullableString("cost"),
                             notes = item.optNullableString("notes"),
+                            placeId = item.optNullableString("placeId"),
+                            transport = item.optNullableString("transport"),
+                            mapLinks = item.optMapLinks(),
                         )
                     }
                 }.orEmpty()
@@ -59,9 +73,41 @@ class LujianJsonParser : PlanParser {
                     label = day.optString("label"),
                     title = day.optString("title"),
                     items = items,
+                    summary = day.optNullableString("summary"),
+                    budget = day.optNullableString("budget"),
+                    backup = day.optNullableString("backup"),
                 )
             }
         }.orEmpty()
+
+        val legacyCoordinates = LegacyMapCoordinateExtractor.extract(request.html, days)
+
+        val places = root.optJSONArray("places")?.let { array ->
+            List(array.length()) { index -> array.optJSONObject(index) }
+                .filterNotNull()
+                .mapIndexed { index, place ->
+                    val coordinates = place.optJSONObject("coordinates")
+                    val id = place.optString("id", "place-$index")
+                    val legacyCoordinate = legacyCoordinates[id]
+                    PlanPlaceDraft(
+                        id = id,
+                        name = place.optString("name"),
+                        address = place.optNullableString("address"),
+                        latitude = place.optLatitude("latitude")
+                            ?: coordinates?.optLatitude("latitude")
+                            ?: coordinates?.optLatitude("lat")
+                            ?: legacyCoordinate?.latitude,
+                        longitude = place.optLongitude("longitude")
+                            ?: coordinates?.optLongitude("longitude")
+                            ?: coordinates?.optLongitude("lng")
+                            ?: coordinates?.optLongitude("lon")
+                            ?: legacyCoordinate?.longitude,
+                        mapLinks = place.optMapLinks(),
+                    )
+                }
+        }.orEmpty()
+
+        val trip = root.optJSONObject("trip")
 
         val sections = buildList {
             root.optJSONArray("sections")?.let { array ->
@@ -84,14 +130,138 @@ class LujianJsonParser : PlanParser {
         }
 
         return ParsedPlan(
-            title = root.optString("title").ifBlank { document.title().ifBlank { request.fileName } },
+            title = extractPageDisplayTitle(document)
+                .ifBlank { root.optString("title") }
+                .ifBlank { document.title() }
+                .ifBlank { request.fileName },
             capability = PlanCapability.ENHANCED,
             destinations = destinations,
             days = days,
             sections = sections,
+            dateRange = root.optNullableString("dateRange"),
+            travelers = root.optNullableString("travelers"),
+            style = root.optNullableString("style"),
+            baseArea = root.optNullableString("baseArea"),
+            budget = root.optNullableString("budget"),
+            accommodationBudget = trip?.optNullableString("accommodationBudget")
+                ?: trip?.optNullableString("hotelBudget"),
+            assumptions = root.optJSONArray("assumptions")?.let { array ->
+                List(array.length()) { index -> array.optString(index) }.filter { it.isNotBlank() }
+            }.orEmpty(),
+            places = places,
+            sourcePayloadJson = root.toString(),
         )
     }
 }
+
+private data class LegacyMapCoordinate(
+    val latitude: Double,
+    val longitude: Double,
+)
+
+private data class LegacyMapPoint(
+    val name: String,
+    val latitude: Double,
+    val longitude: Double,
+    val kind: String?,
+)
+
+private data class LinkedPlanPlace(
+    val dayId: String,
+    val title: String,
+    val category: String?,
+)
+
+private object LegacyMapCoordinateExtractor {
+    private const val MARKER = "LIVE_MAP_DATA_START"
+    private val dayPattern = Regex(
+        """['\"](day-\d+)['\"]\s*:\s*\{[\s\S]*?points\s*:\s*\[([\s\S]*?)]\s*,\s*routes\s*:""",
+    )
+    private val pointPattern = Regex("""\{([^{}]*?coord\s*:\s*\[[^\]]+\][^{}]*?)\}""")
+    private val namePattern = Regex("""name\s*:\s*(['\"])(.*?)\1""")
+    private val kindPattern = Regex("""kind\s*:\s*(['\"])(.*?)\1""")
+    private val coordinatePattern = Regex(
+        """coord\s*:\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]""",
+    )
+
+    fun extract(html: String, days: List<PlanDayDraft>): Map<String, LegacyMapCoordinate> {
+        val markedContent = html.substringAfter(MARKER, missingDelimiterValue = "")
+        if (markedContent.isBlank()) return emptyMap()
+        val pointsByDay = dayPattern.findAll(markedContent).associate { dayMatch ->
+            dayMatch.groupValues[1] to pointPattern.findAll(dayMatch.groupValues[2]).mapNotNull(::parsePoint).toList()
+        }
+        if (pointsByDay.isEmpty()) return emptyMap()
+
+        val linkedPlaces = days.flatMap { day ->
+            day.items.mapNotNull { item ->
+                item.placeId?.takeIf(String::isNotBlank)?.let { placeId ->
+                    placeId to LinkedPlanPlace(day.id, item.title, item.category)
+                }
+            }
+        }.toMap()
+
+        return linkedPlaces.mapNotNull { (placeId, linked) ->
+            val point = selectPoint(linked, pointsByDay[linked.dayId].orEmpty()) ?: return@mapNotNull null
+            placeId to LegacyMapCoordinate(point.latitude, point.longitude)
+        }.toMap()
+    }
+
+    private fun parsePoint(match: MatchResult): LegacyMapPoint? {
+        val body = match.groupValues[1]
+        val name = namePattern.find(body)?.groupValues?.get(2)?.takeIf(String::isNotBlank) ?: return null
+        val coordinate = coordinatePattern.find(body) ?: return null
+        val longitude = coordinate.groupValues[1].toDoubleOrNull()?.takeIf { it in -180.0..180.0 } ?: return null
+        val latitude = coordinate.groupValues[2].toDoubleOrNull()?.takeIf { it in -90.0..90.0 } ?: return null
+        return LegacyMapPoint(
+            name = name,
+            latitude = latitude,
+            longitude = longitude,
+            kind = kindPattern.find(body)?.groupValues?.get(2),
+        )
+    }
+
+    private fun selectPoint(linked: LinkedPlanPlace, points: List<LegacyMapPoint>): LegacyMapPoint? {
+        if (points.isEmpty()) return null
+        val isHotel = linked.category.equals("hotel", ignoreCase = true) || "酒店" in linked.title
+        if (isHotel) points.firstOrNull { it.kind.equals("hotel", ignoreCase = true) }?.let { return it }
+
+        val target = normalize(linked.title)
+        return points.mapIndexedNotNull { index, point ->
+            val match = matchPosition(target, normalize(point.name)) ?: return@mapIndexedNotNull null
+            Triple(point, match, index)
+        }.minWithOrNull(
+            compareBy<Triple<LegacyMapPoint, Pair<Int, Int>, Int>> { it.second.first }
+                .thenByDescending { it.second.second }
+                .thenBy { it.third },
+        )?.first
+    }
+
+    private fun matchPosition(target: String, candidate: String): Pair<Int, Int>? {
+        if (target.isBlank() || candidate.isBlank()) return null
+        target.indexOf(candidate).takeIf { it >= 0 }?.let { return it to candidate.length }
+        candidate.indexOf(target).takeIf { it >= 0 }?.let { return 0 to target.length }
+        for (length in minOf(target.length, candidate.length) downTo 3) {
+            val matches = (0..candidate.length - length).mapNotNull { start ->
+                val fragment = candidate.substring(start, start + length)
+                target.indexOf(fragment).takeIf { it >= 0 }
+            }
+            if (matches.isNotEmpty()) return matches.min() to length
+        }
+        return null
+    }
+
+    private fun normalize(value: String): String = value.lowercase().filter(Char::isLetterOrDigit)
+}
+
+private fun extractPageDisplayTitle(document: org.jsoup.nodes.Document): String =
+    sequenceOf(
+        "[data-lujian-cover] .brand-title",
+        "[data-lujian-cover] .logo-title",
+        ".logo-title",
+        "#mobile-brand-title",
+    ).mapNotNull { selector -> document.selectFirst(selector)?.text()?.trim() }
+        .firstOrNull(String::isNotBlank)
+        .orEmpty()
 
 class DalianTemplateParser : PlanParser {
     override fun parse(request: ParseRequest): ParsedPlan? {
@@ -173,4 +343,18 @@ private fun JSONObject.optNullableString(name: String): String? =
     optString(name).ifBlank { null }
 
 private fun JSONObject.optNullableDouble(name: String): Double? =
-    if (has(name) && !isNull(name)) optDouble(name) else null
+    if (has(name) && !isNull(name)) optDouble(name).takeIf(Double::isFinite) else null
+
+private fun JSONObject.optLatitude(name: String): Double? =
+    optNullableDouble(name)?.takeIf { it in -90.0..90.0 }
+
+private fun JSONObject.optLongitude(name: String): Double? =
+    optNullableDouble(name)?.takeIf { it in -180.0..180.0 }
+
+private fun JSONObject.optMapLinks(): PlanMapLinks {
+    val links = optJSONObject("mapLinks") ?: return PlanMapLinks()
+    return PlanMapLinks(
+        amap = links.optNullableString("amap"),
+        baidu = links.optNullableString("baidu"),
+    )
+}

@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
             isAppearanceLightStatusBars = true
             isAppearanceLightNavigationBars = true
         }
+        window.decorView.post(::preferHighestRefreshRate)
         incomingUri.value = extractHtmlUri(intent)
         setContent {
             LujianTheme {
@@ -40,6 +41,25 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         incomingUri.value = extractHtmlUri(intent)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun preferHighestRefreshRate() {
+        val targetDisplay = windowManager.defaultDisplay
+        val currentMode = targetDisplay.mode
+        val preferredModeId = DisplayRefreshPolicy.preferredModeId(
+            currentWidth = currentMode.physicalWidth,
+            currentHeight = currentMode.physicalHeight,
+            modes = targetDisplay.supportedModes.map { mode ->
+                DisplayModeSpec(mode.modeId, mode.physicalWidth, mode.physicalHeight, mode.refreshRate)
+            },
+        ) ?: return
+
+        val attributes = window.attributes
+        if (attributes.preferredDisplayModeId != preferredModeId) {
+            attributes.preferredDisplayModeId = preferredModeId
+            window.attributes = attributes
+        }
     }
 
     private fun extractHtmlUri(intent: Intent?): Uri? = when (intent?.action) {

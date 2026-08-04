@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.ViewGroup
@@ -22,7 +21,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -30,7 +28,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -48,9 +45,10 @@ import com.lujian.travelplan.map.MapCameraPolicy
 import com.lujian.travelplan.map.MapViewportMode
 import com.lujian.travelplan.map.MapViewportPolicy
 import com.lujian.travelplan.map.MarkerClusterer
-import com.lujian.travelplan.map.LUJIAN_MAP_STYLE_URL
 import com.lujian.travelplan.map.LujianMapStyle
 import com.lujian.travelplan.ui.components.PaperCard
+import com.lujian.travelplan.ui.components.LujianPinMark
+import com.lujian.travelplan.ui.components.rememberLujianMapView
 import com.lujian.travelplan.ui.theme.Coral
 import com.lujian.travelplan.ui.theme.Ink
 import com.lujian.travelplan.ui.theme.Paper
@@ -127,20 +125,10 @@ private fun MapLibreSurface(
     onRetry: () -> Unit,
 ) {
     val context = LocalContext.current
-    val mapView = remember(key) { MapView(context).apply { onCreate(Bundle()) } }
+    val mapView = rememberLujianMapView(key)
     var map by remember(key) { mutableStateOf<MapLibreMap?>(null) }
     var ready by remember(key) { mutableStateOf(false) }
     var timedOut by remember(key) { mutableStateOf(false) }
-
-    DisposableEffect(mapView) {
-        mapView.onStart()
-        mapView.onResume()
-        onDispose {
-            mapView.onPause()
-            mapView.onStop()
-            mapView.onDestroy()
-        }
-    }
 
     LaunchedEffect(key) {
         delay(8_000)
@@ -212,7 +200,7 @@ private fun MapLibreSurface(
         factory = {
             mapView.apply {
                 getMapAsync { mapLibreMap ->
-                    mapLibreMap.setStyle(Style.Builder().fromUri(LUJIAN_MAP_STYLE_URL)) { style ->
+                    mapLibreMap.setStyle(LujianMapStyle.styleBuilder(context)) { style ->
                         LujianMapStyle.apply(style)
                         map = mapLibreMap
                         ready = true
@@ -229,7 +217,7 @@ private fun MapLibreSurface(
             PaperCard(modifier = Modifier.padding(32.dp)) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (!timedOut) CircularProgressIndicator(color = Coral)
-                    Icon(Icons.Filled.LocationOn, contentDescription = null, tint = Coral)
+                    LujianPinMark(Modifier.height(36.dp).fillMaxWidth())
                     Text(if (timedOut) "地图暂时没有连上" else "正在展开地图", style = MaterialTheme.typography.titleLarge)
                     Text("本地计划仍可从计划库正常阅读", style = MaterialTheme.typography.bodyMedium)
                     if (timedOut) IconButton(onClick = onRetry) {

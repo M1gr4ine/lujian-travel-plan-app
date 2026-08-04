@@ -54,9 +54,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,7 +73,11 @@ import com.lujian.travelplan.export.MobileHtmlGenerator
 import com.lujian.travelplan.model.PlanCapability
 import com.lujian.travelplan.model.PlanDayDraft
 import com.lujian.travelplan.model.PlanItemDraft
+import com.lujian.travelplan.model.ParsedPlan
+import com.lujian.travelplan.model.PlanSectionDraft
+import com.lujian.travelplan.ui.PlanSharedTransitionScopes
 import com.lujian.travelplan.ui.components.PaperCard
+import com.lujian.travelplan.ui.planSharedBounds
 import com.lujian.travelplan.ui.theme.Coral
 import com.lujian.travelplan.ui.theme.Gold
 import com.lujian.travelplan.ui.theme.Ink
@@ -90,6 +96,8 @@ fun PlanDetailScreen(
     onEdit: () -> Unit,
     onViewHtml: (Boolean) -> Unit,
     onDeleted: () -> Unit,
+    transitionScopes: PlanSharedTransitionScopes? = null,
+    sharedBoundsEnabled: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -114,6 +122,9 @@ fun PlanDetailScreen(
     }
 
     Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .planSharedBounds(plan.id, transitionScopes, sharedBoundsEnabled),
         topBar = {
             TopAppBar(
                 title = {
@@ -197,9 +208,25 @@ internal fun NativePlanReader(plan: StoredPlan, modifier: Modifier = Modifier) {
     val pagerState = rememberPagerState(pageCount = { days.size })
     val dateListState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    var activePage by remember { mutableStateOf(PlanReaderPage.ITINERARY) }
+    var focusedItemId by remember { mutableStateOf<String?>(null) }
+    var selectedDayIndex by rememberSaveable { mutableIntStateOf(0) }
+    var lastPagerPage by remember { mutableIntStateOf(pagerState.currentPage) }
 
     LaunchedEffect(pagerState.currentPage) {
-        dateListState.animateScrollToItem(pagerState.currentPage)
+        if (pagerState.currentPage != lastPagerPage) focusedItemId = null
+        lastPagerPage = pagerState.currentPage
+        selectedDayIndex = pagerState.currentPage
+    }
+
+    LaunchedEffect(selectedDayIndex) {
+        dateListState.animateScrollToItem(selectedDayIndex)
+    }
+
+    LaunchedEffect(activePage) {
+        if (activePage != PlanReaderPage.BUDGET && pagerState.currentPage != selectedDayIndex) {
+            pagerState.scrollToPage(selectedDayIndex)
+        }
     }
 
     Column(modifier.fillMaxSize().background(Paper)) {
@@ -211,35 +238,94 @@ internal fun NativePlanReader(plan: StoredPlan, modifier: Modifier = Modifier) {
             )
             Text(plan.parsed.title, style = MaterialTheme.typography.headlineLarge)
         }
-        LazyRow(
-            state = dateListState,
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth().background(Paper),
-        ) {
-            itemsIndexed(days, key = { _, day -> day.id }) { index, day ->
-                val selected = index == pagerState.currentPage
-                Column(
-                    Modifier
-                        .background(if (selected) Coral else Color.Transparent, RoundedCornerShape(14.dp))
-                        .clickable { scope.launch { pagerState.animateScrollToPage(index) } }
-                        .padding(horizontal = 18.dp, vertical = 10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text("DAY ${index + 1}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black)
-                    Text(day.label.ifBlank { day.title }, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        PlanReaderTabs(activePage) { page ->
+            activePage = page
+            if (page != PlanReaderPage.MAP) focusedItemId = null
+        }
+        if (activePage != PlanReaderPage.BUDGET) {
+            LazyRow(
+                state = dateListState,
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().background(Paper),
+            ) {
+                itemsIndexed(days, key = { _, day -> day.id }) { index, day ->
+                    val selected = index == selectedDayIndex
+                    Column(
+                        Modifier
+                            .background(if (selected) Coral else Color.Transparent, RoundedCornerShape(14.dp))
+                            .clickable {
+                                focusedItemId = null
+                                val action = PlanReaderDayPolicy.select(index, days.size, activePage)
+                                selectedDayIndex = action.selectedIndex
+                                action.pagerTarget?.let { target ->
+                                    scope.launch { pagerState.animateScrollToPage(target) }
+                                }
+                            }
+                            .padding(horizontal = 18.dp, vertical = 10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text("DAY ${index + 1}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black)
+                        Text(day.label.ifBlank { day.title }, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                    }
                 }
             }
         }
         HorizontalDivider(color = Ink, thickness = 2.dp)
-        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            DayPage(days[page], if (page == days.lastIndex) plan.parsed.sections else emptyList())
+        when (activePage) {
+            PlanReaderPage.ITINERARY -> HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                DayPage(
+                    day = days[page],
+                    sections = if (page == days.lastIndex) plan.parsed.sections else emptyList(),
+                    onShowMap = { itemId ->
+                        selectedDayIndex = page
+                        focusedItemId = itemId
+                        activePage = PlanReaderPage.MAP
+                    },
+                )
+            }
+            PlanReaderPage.MAP -> HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                DailyMapPage(
+                    plan = plan.parsed,
+                    day = days[page],
+                    focusedItemId = focusedItemId,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            PlanReaderPage.BUDGET -> BudgetPage(plan.parsed, Modifier.fillMaxSize())
         }
     }
 }
 
 @Composable
-private fun DayPage(day: PlanDayDraft, sections: List<com.lujian.travelplan.model.PlanSectionDraft>) {
+private fun PlanReaderTabs(activePage: PlanReaderPage, onSelect: (PlanReaderPage) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        PlanReaderPage.entries.forEach { page ->
+            val selected = page == activePage
+            Box(
+                Modifier
+                    .weight(1f)
+                    .background(if (selected) Ink else Color.Transparent, RoundedCornerShape(999.dp))
+                    .clickable { onSelect(page) }
+                    .padding(horizontal = 8.dp, vertical = 9.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    page.label,
+                    color = if (selected) Paper else Ink,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DayPage(day: PlanDayDraft, sections: List<PlanSectionDraft>, onShowMap: (String) -> Unit) {
     LazyColumn(
         contentPadding = PaddingValues(18.dp, 18.dp, 18.dp, 42.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -250,7 +336,7 @@ private fun DayPage(day: PlanDayDraft, sections: List<com.lujian.travelplan.mode
             Text(day.title, style = MaterialTheme.typography.headlineMedium)
         }
         items(day.items.size, key = { day.items[it].id }) { index ->
-            ItineraryCard(day.items[index], index)
+            ItineraryCard(day.items[index], index, onShowMap)
         }
         if (day.items.isEmpty()) {
             item { Text("这一天还没有行程，进入编辑模式添加。", style = MaterialTheme.typography.bodyLarge) }
@@ -272,9 +358,10 @@ private fun DayPage(day: PlanDayDraft, sections: List<com.lujian.travelplan.mode
 }
 
 @Composable
-private fun ItineraryCard(item: PlanItemDraft, index: Int) {
+private fun ItineraryCard(item: PlanItemDraft, index: Int, onShowMap: (String) -> Unit) {
+    var expanded by remember(item.id) { mutableStateOf(false) }
     PaperCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
         background = when (index % 3) {
             0 -> Gold.copy(alpha = .30f)
             1 -> Mint.copy(alpha = .28f)
@@ -284,17 +371,107 @@ private fun ItineraryCard(item: PlanItemDraft, index: Int) {
         Row {
             Column(Modifier.width(76.dp)) {
                 Text(item.time.orEmpty().ifBlank { "—" }, color = Coral, style = MaterialTheme.typography.titleMedium)
-                Text(item.category.orEmpty(), style = MaterialTheme.typography.labelSmall)
+                Text(PlanReaderPresentation.categoryLabel(item.category), style = MaterialTheme.typography.labelSmall)
             }
             Column(Modifier.weight(1f)) {
                 Text(item.title, style = MaterialTheme.typography.titleLarge)
-                if (!item.notes.isNullOrBlank()) Text(item.notes, style = MaterialTheme.typography.bodyMedium)
+                if (!item.notes.isNullOrBlank()) {
+                    Text(
+                        item.notes,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = if (expanded) Int.MAX_VALUE else 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 if (!item.cost.isNullOrBlank()) {
                     Spacer(Modifier.height(8.dp))
                     Text("费用 · ${item.cost}", style = MaterialTheme.typography.labelLarge)
                 }
+                if (expanded) {
+                    Spacer(Modifier.height(10.dp))
+                    HorizontalDivider(color = Ink.copy(alpha = .18f))
+                    item.transport?.takeIf { it.isNotBlank() }?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text("下一程 · $it", style = MaterialTheme.typography.bodySmall)
+                    }
+                    TextButton(
+                        onClick = { onShowMap(item.id) },
+                        contentPadding = PaddingValues(0.dp),
+                    ) { Text("🗺️ 在每日地图中查看") }
+                } else {
+                    Spacer(Modifier.height(8.dp))
+                    Text("展开详情 ↓", color = Coral, style = MaterialTheme.typography.labelMedium)
+                }
             }
             Icon(Icons.Filled.Train, contentDescription = null, tint = Ink.copy(alpha = .35f), modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun BudgetPage(plan: ParsedPlan, modifier: Modifier = Modifier) {
+    val budgetSections = plan.sections.filter { section ->
+        section.title.contains("预算") || section.title.contains("住宿") || section.title.contains("费用")
+    }
+    LazyColumn(
+        modifier = modifier.background(Paper),
+        contentPadding = PaddingValues(18.dp, 18.dp, 18.dp, 42.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        item {
+            PaperCard(Modifier.fillMaxWidth(), background = Ink) {
+                Column {
+                    Text("行程总预算", color = Paper.copy(alpha = .68f), style = MaterialTheme.typography.labelLarge)
+                    Text(plan.budget.orEmpty().ifBlank { "待估算" }, color = Gold, style = MaterialTheme.typography.headlineMedium)
+                    val summary = listOfNotNull(plan.dateRange, plan.travelers, plan.baseArea).filter { it.isNotBlank() }
+                    if (summary.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(summary.joinToString(" · "), color = Paper, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        }
+        item { Text("每日预算", color = Coral, style = MaterialTheme.typography.headlineMedium) }
+        itemsIndexed(plan.days, key = { _, day -> "budget-${day.id}" }) { index, day ->
+            PaperCard(Modifier.fillMaxWidth(), background = if (index % 2 == 0) Gold.copy(alpha = .22f) else Paper) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1f)) {
+                        Text("DAY ${index + 1} · ${day.label}", style = MaterialTheme.typography.labelLarge)
+                        Text(day.title, style = MaterialTheme.typography.titleMedium)
+                    }
+                    Text(day.budget.orEmpty().ifBlank { "待估算" }, color = Coral, fontWeight = FontWeight.Black)
+                }
+            }
+        }
+        if (!plan.baseArea.isNullOrBlank() || !plan.accommodationBudget.isNullOrBlank()) {
+            item {
+                PaperCard(Modifier.fillMaxWidth(), background = Mint.copy(alpha = .24f)) {
+                    Column {
+                        Text("住宿", style = MaterialTheme.typography.titleLarge)
+                        plan.baseArea?.takeIf { it.isNotBlank() }?.let { Text("落脚区域 · $it") }
+                        plan.accommodationBudget?.takeIf { it.isNotBlank() }?.let { Text("住宿预算 · $it") }
+                    }
+                }
+            }
+        }
+        itemsIndexed(budgetSections, key = { index, section -> "budget-section-$index-${section.title}" }) { _, section ->
+            PaperCard(Modifier.fillMaxWidth()) {
+                Column {
+                    Text(section.title, style = MaterialTheme.typography.titleLarge)
+                    Spacer(Modifier.height(7.dp))
+                    Text(section.content, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+        if (plan.assumptions.isNotEmpty()) {
+            item {
+                PaperCard(Modifier.fillMaxWidth(), background = Gold.copy(alpha = .18f)) {
+                    Column {
+                        Text("预算说明", style = MaterialTheme.typography.titleLarge)
+                        plan.assumptions.forEach { Text("· $it", style = MaterialTheme.typography.bodyMedium) }
+                    }
+                }
+            }
         }
     }
 }

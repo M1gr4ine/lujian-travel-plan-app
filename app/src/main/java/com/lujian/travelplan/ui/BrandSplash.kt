@@ -8,9 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.lujian.travelplan.ui.theme.Coral
 import com.lujian.travelplan.ui.theme.Gold
 import com.lujian.travelplan.ui.theme.Ink
+import com.lujian.travelplan.ui.components.LujianPinMark
 import kotlinx.coroutines.delay
 
 @Composable
@@ -81,10 +79,7 @@ fun BrandSplash(
                 drawCircle(Ink, radius = 7f, center = Offset(size.width * .08f, size.height * .72f))
                 drawCircle(Coral, radius = 7f * route.value, center = Offset(size.width * .82f, size.height * .32f))
             }
-            Icon(
-                Icons.Filled.LocationOn,
-                contentDescription = null,
-                tint = Coral,
+            LujianPinMark(
                 modifier = Modifier
                     .size(54.dp)
                     .graphicsLayer {
