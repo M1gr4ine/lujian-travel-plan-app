@@ -216,10 +216,28 @@ def build_lujian_payload(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def build_static_headline_html(plan: dict[str, Any]) -> str:
+    """生成禁用 JavaScript 时仍可见的主标题，并保持与运行时渲染一致。"""
+    headline = str(plan.get("headline") or plan.get("title") or f"{plan.get('destination') or '旅行'}计划")
+    comma_index = headline.find("，")
+    lines = [headline[:comma_index + 1], headline[comma_index + 1:]] if comma_index >= 0 else [headline]
+    accent_text = "吃个痛快。" if "美食" in str(plan.get("style") or "") else "写进旅笺。"
+    rendered: list[str] = []
+    for line in lines:
+        if line.endswith(accent_text):
+            prefix = html.escape(line[:-len(accent_text)], quote=False)
+            accent = html.escape(accent_text, quote=False)
+            rendered.append(f'{prefix}<span class="headline-accent">{accent}</span>')
+        else:
+            rendered.append(html.escape(line, quote=False))
+    return "<br>".join(rendered)
+
+
 def build_html(data: dict[str, Any]) -> str:
     plan = build_lujian_payload(data)
     payload = json.dumps(plan, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
     title = html.escape(plan["title"], quote=True)
+    headline_markup = build_static_headline_html(plan)
     template = r'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -346,7 +364,7 @@ def build_html(data: dict[str, Any]) -> str:
         <button id="save-page" class="save-btn js-save" type="button">保存页面</button>
       </div>
       <p class="eyebrow">Travel journal · 行程手账</p>
-      <h1 id="plan-title"></h1>
+      <h1 id="plan-title" data-lujian-cover>__HEADLINE__</h1>
       <div id="hero-meta" class="hero-meta"></div>
     </header>
     <nav class="page-tabs mobile-page-tabs" aria-label="手机页面视图"><button id="mobile-itinerary-tab" class="page-tab js-page-tab active" type="button" data-view="itinerary" aria-selected="true">行程</button><button id="mobile-map-tab" class="page-tab js-page-tab" type="button" data-view="map" aria-selected="false">地图</button></nav>
@@ -370,7 +388,7 @@ def build_html(data: dict[str, Any]) -> str:
     </header>
     <section class="desktop-hero">
       <p class="eyebrow">Travel journal · 桌面行程总览</p>
-      <h1 id="desktop-hero-title"></h1>
+      <h1 id="desktop-hero-title">__HEADLINE__</h1>
       <p id="desktop-hero-copy"></p>
     </section>
     <nav class="page-tabs desktop-page-tabs" aria-label="电脑页面视图"><button id="desktop-itinerary-tab" class="page-tab js-page-tab active" type="button" data-view="itinerary" aria-selected="true">行程</button><button id="desktop-map-tab" class="page-tab js-page-tab" type="button" data-view="map" aria-selected="false">地图</button></nav>
@@ -959,7 +977,7 @@ def build_html(data: dict[str, Any]) -> str:
 </body>
 </html>
 '''
-    return template.replace("__TITLE__", title).replace("__PAYLOAD__", payload)
+    return template.replace("__TITLE__", title).replace("__HEADLINE__", headline_markup).replace("__PAYLOAD__", payload)
 
 
 def main() -> int:

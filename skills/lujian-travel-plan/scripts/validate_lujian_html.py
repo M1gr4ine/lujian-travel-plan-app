@@ -167,6 +167,7 @@ def main() -> int:
         "mobile app": r'class="mobile-app app-shell paper"',
         "mobile sticky date axis": r'class="date-axis-wrap"',
         "mobile single day renderer": r'class="day-panel"',
+        "static Android cover headline": r'<h1 id="plan-title" data-lujian-cover>.+?</h1>',
         "date tab switch": r"function changeDay\(",
         "swipe start": r"touchstart",
         "swipe end": r"touchend",

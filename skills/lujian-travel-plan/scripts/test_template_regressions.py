@@ -3,7 +3,42 @@
 
 from __future__ import annotations
 
+from html.parser import HTMLParser
+
 from create_static_html import build_html, build_lujian_payload
+
+
+class StaticCoverParser(HTMLParser):
+    """提取安卓无脚本缩略图使用的静态封面文案。"""
+
+    _VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.cover_count = 0
+        self._depth = 0
+        self._parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        if self._depth:
+            if tag not in self._VOID_TAGS:
+                self._depth += 1
+        elif "data-lujian-cover" in attributes:
+            self.cover_count += 1
+            self._depth = 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if self._depth:
+            self._depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._depth:
+            self._parts.append(data)
+
+    @property
+    def text(self) -> str:
+        return "".join(self._parts).strip()
 
 
 def fixture(day_count: int) -> dict:
@@ -97,9 +132,13 @@ def main() -> int:
     five = build_lujian_payload(fixture(5))
     six = build_lujian_payload(fixture(6))
     html = build_html(fixture(5))
+    cover = StaticCoverParser()
+    cover.feed(html)
 
     require(five["headline"] == "五天说走就走，把大连吃个痛快。", "五天美食主标题回归")
     require(six["headline"] == "六天说走就走，把大连吃个痛快。", "六天美食主标题回归")
+    require(cover.cover_count == 1, "安卓无脚本预览必须有且仅有一个静态封面节点")
+    require(cover.text == five["headline"], "安卓无脚本预览未静态输出完整主标题")
     require("renderHeadline($('plan-title'))" in html, "手机端未使用共享主标题")
     require("renderHeadline($('desktop-hero-title'))" in html, "桌面端未使用共享主标题")
     require("font:900 20px/1" in html, "笺字图标未固定加粗")
