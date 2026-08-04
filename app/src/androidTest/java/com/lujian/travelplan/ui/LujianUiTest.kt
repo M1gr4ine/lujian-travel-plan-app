@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import com.lujian.travelplan.data.StoredPlan
+import com.lujian.travelplan.data.PlanPhoto
 import com.lujian.travelplan.model.ParsedPlan
 import com.lujian.travelplan.model.PlanCapability
 import com.lujian.travelplan.model.PlanDayDraft
@@ -23,6 +24,7 @@ import com.lujian.travelplan.model.PlanMapStopDraft
 import com.lujian.travelplan.ui.components.LujianMapControls
 import com.lujian.travelplan.ui.components.createLujianMapInfoWindow
 import com.lujian.travelplan.ui.screens.NativePlanReader
+import com.lujian.travelplan.ui.screens.CoverEditorCard
 import com.lujian.travelplan.ui.screens.PlanLibraryScreen
 import com.lujian.travelplan.ui.theme.LujianTheme
 import androidx.test.platform.app.InstrumentationRegistry
@@ -33,6 +35,29 @@ import org.junit.Test
 class LujianUiTest {
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun 编辑页可以选择和恢复默认预览图() {
+        var chooseRequested = false
+        var clearRequested = false
+        composeRule.setContent {
+            LujianTheme {
+                CoverEditorCard(
+                    customCoverPath = "plans/1/cover/custom.jpg",
+                    thumbnailPath = null,
+                    onChoose = { chooseRequested = true },
+                    onClear = { clearRequested = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("更换预览图").performClick()
+        composeRule.onNodeWithText("恢复默认").performClick()
+        composeRule.runOnIdle {
+            check(chooseRequested)
+            check(clearRequested)
+        }
+    }
 
     @Test
     fun `详情返回阶段仍保留计划库进入时的共享动画`() {
@@ -93,6 +118,47 @@ class LujianUiTest {
     }
 
     @Test
+    fun 旅笺板支持切换足迹板并归档所选计划() {
+        val active = StoredPlan(
+            id = 1,
+            parsed = ParsedPlan(title = "待出发大连", capability = PlanCapability.ENHANCED),
+            sourceFileName = "active.html",
+            rawPath = "plans/1/raw.html",
+            generatedPath = null,
+            thumbnailPath = null,
+            compatibilityMode = false,
+            updatedAt = 2,
+        )
+        val archived = active.copy(
+            id = 2,
+            parsed = active.parsed.copy(title = "走过青岛"),
+            rawPath = "plans/2/raw.html",
+            archivedAt = 10,
+        )
+        var archiveRequest: Pair<Set<Long>, Boolean>? = null
+        composeRule.setContent {
+            LujianTheme {
+                PlanLibraryScreen(
+                    plans = listOf(active, archived),
+                    onImport = {},
+                    onOpenPlan = {},
+                    onSetArchived = { ids, value -> archiveRequest = ids to value },
+                    reduceMotion = true,
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("计划板").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("足迹板").assertIsDisplayed()
+        composeRule.onNodeWithText("走过青岛").assertIsDisplayed()
+        composeRule.onNodeWithText("足迹板").performClick()
+        composeRule.onNodeWithText("管理").performClick()
+        composeRule.onNodeWithContentDescription("待出发大连折角便签").performClick()
+        composeRule.onNodeWithText("归档").performClick()
+        composeRule.runOnIdle { check(archiveRequest == (setOf(1L) to true)) }
+    }
+
+    @Test
     fun 原生阅读器支持日期切换预算页和卡片跳转地图() {
         val plan = StoredPlan(
             id = 1,
@@ -142,6 +208,38 @@ class LujianUiTest {
         composeRule.onNodeWithText("第一天内容").assertIsDisplayed().performTouchInput { swipeLeft() }
         composeRule.waitForIdle()
         composeRule.onNodeWithText("第二天内容").assertIsDisplayed()
+    }
+
+    @Test
+    fun 计划相册可以按加入时间或大头针查看() {
+        val plan = StoredPlan(
+            id = 9,
+            parsed = ParsedPlan(
+                title = "相册测试",
+                capability = PlanCapability.ENHANCED,
+                days = listOf(
+                    PlanDayDraft(
+                        "d1",
+                        "第一天",
+                        "海边",
+                        listOf(PlanItemDraft("pin-a", "09:00", "星海广场", null, null, null)),
+                    ),
+                ),
+            ),
+            sourceFileName = "album.html",
+            rawPath = "plans/9/raw.html",
+            generatedPath = null,
+            thumbnailPath = null,
+            compatibilityMode = false,
+            updatedAt = 1,
+            photos = listOf(PlanPhoto(1, "pin-a", "星海广场", "plans/9/photos/a.jpg", 10, null)),
+        )
+        composeRule.setContent { LujianTheme { NativePlanReader(plan) } }
+
+        composeRule.onNodeWithText("📷 相册").performClick()
+        composeRule.onNodeWithText("按加入时间").assertIsDisplayed()
+        composeRule.onNodeWithText("按大头针").performClick()
+        composeRule.onNodeWithText("星海广场").assertIsDisplayed()
     }
 
     @Test

@@ -6,12 +6,13 @@ import androidx.room.RoomDatabase
 @Database(
     entities = [
         PlanEntity::class,
+        PlanPhotoEntity::class,
         PlanDayEntity::class,
         PlanItemEntity::class,
         DestinationEntity::class,
         PlanDestinationCrossRef::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class LujianDatabase : RoomDatabase() {

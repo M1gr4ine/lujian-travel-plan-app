@@ -34,9 +34,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Luggage
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Luggage
+import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -74,6 +76,7 @@ import com.lujian.travelplan.importing.ImportResult
 import com.lujian.travelplan.importing.LocationCandidate
 import com.lujian.travelplan.ui.screens.EditPlanScreen
 import com.lujian.travelplan.ui.screens.HomeScreen
+import com.lujian.travelplan.ui.screens.GlobalGalleryScreen
 import com.lujian.travelplan.ui.screens.LocationPickerScreen
 import com.lujian.travelplan.ui.screens.PlanDetailScreen
 import com.lujian.travelplan.ui.screens.PlanLibraryScreen
@@ -93,7 +96,8 @@ private enum class RootDestination(
     val selectedIcon: ImageVector,
 ) {
     HOME("home", "首页", Icons.Outlined.Home, Icons.Rounded.Home),
-    LIBRARY("library", "计划库", Icons.Outlined.Luggage, Icons.Rounded.Luggage),
+    LIBRARY("library", "旅笺板", Icons.Outlined.Luggage, Icons.Rounded.Luggage),
+    GALLERY("gallery", "相册", Icons.Outlined.PhotoLibrary, Icons.Rounded.PhotoLibrary),
     PROFILE("profile", "我", Icons.Outlined.AccountCircle, Icons.Rounded.AccountCircle),
 }
 
@@ -295,8 +299,18 @@ private fun LujianApp(
                         navController.navigate("detail/$planId") { launchSingleTop = true }
                     },
                     onDeletePlans = { ids -> scope.launch { graph.repository.deleteAll(ids) } },
+                    onSetArchived = { ids, archived ->
+                        scope.launch { graph.repository.setArchived(ids, archived) }
+                    },
+                    reduceMotion = reduceMotion,
                     transitionScopes = PlanSharedTransitionScopes(this@SharedTransitionLayout, this),
                     sharedBoundsEnabled = !reduceMotion,
+                )
+            }
+            composable(RootDestination.GALLERY.route) {
+                GlobalGalleryScreen(
+                    plans = plans,
+                    onOpenPlan = { planId -> navController.navigate("detail/$planId") },
                 )
             }
             composable(RootDestination.PROFILE.route) { ProfileScreen(plans) }
@@ -354,7 +368,7 @@ private fun LujianApp(
         AlertDialog(
             onDismissRequest = { duplicate = null },
             title = { Text("发现相同计划") },
-            text = { Text("“${existing.existingTitle}”已在计划库中。") },
+            text = { Text("“${existing.existingTitle}”已在旅笺板中。") },
             confirmButton = {
                 TextButton(onClick = {
                     duplicateUri?.let { runImport(it, DuplicateResolution.UPDATE) }

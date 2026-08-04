@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.room.Room
 import com.lujian.travelplan.data.PlanRepository
 import com.lujian.travelplan.data.db.LujianDatabase
+import com.lujian.travelplan.data.db.MIGRATION_1_2
 import com.lujian.travelplan.importing.PlanImportService
 import com.lujian.travelplan.importing.PlanReindexService
 import kotlinx.coroutines.CoroutineScope
@@ -31,7 +32,7 @@ class AppGraph(application: Application) {
         application,
         LujianDatabase::class.java,
         "lujian.db",
-    ).build()
+    ).addMigrations(MIGRATION_1_2).build()
     val repository = PlanRepository(application, database)
     val importService = PlanImportService(application, repository)
     val reindexService = PlanReindexService(application, repository)

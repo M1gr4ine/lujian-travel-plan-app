@@ -80,8 +80,10 @@ internal fun DailyMapPage(
     plan: ParsedPlan,
     day: PlanDayDraft,
     focusedItemId: String?,
-    onDragEnabledChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
+    onDragEnabledChange: (Boolean) -> Unit = {},
+    onAddPhotos: (DailyMapStop) -> Unit = {},
+    onOpenPhotos: (DailyMapStop) -> Unit = {},
 ) {
     val route = remember(plan, day) { buildDailyMapPresentation(plan, day) }
     val mappedStops = route.stops.filter { it.latitude != null && it.longitude != null }
@@ -216,6 +218,8 @@ internal fun DailyMapPage(
                     index = index,
                     focusedItemId = selectedItemId,
                     onFocus = { requestStopFocus(leg.toStop.itemId) },
+                    onAddPhotos = onAddPhotos,
+                    onOpenPhotos = onOpenPhotos,
                 )
             }
         } else {
@@ -225,6 +229,8 @@ internal fun DailyMapPage(
                     index = index,
                     focusedItemId = selectedItemId,
                     onFocus = { requestStopFocus(stop.itemId) },
+                    onAddPhotos = { onAddPhotos(stop) },
+                    onOpenPhotos = { onOpenPhotos(stop) },
                 )
             }
         }
@@ -255,6 +261,8 @@ private fun RouteLegCard(
     index: Int,
     focusedItemId: String?,
     onFocus: () -> Unit,
+    onAddPhotos: (DailyMapStop) -> Unit,
+    onOpenPhotos: (DailyMapStop) -> Unit,
 ) {
     val isFocused = leg.toStop.itemId == focusedItemId
     PaperCard(
@@ -280,6 +288,18 @@ private fun RouteLegCard(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(leg.summary, style = MaterialTheme.typography.bodySmall, color = Ink.copy(alpha = .66f))
+                if (index == 0) {
+                    PhotoActions(
+                        label = leg.fromStop.title,
+                        onAddPhotos = { onAddPhotos(leg.fromStop) },
+                        onOpenPhotos = { onOpenPhotos(leg.fromStop) },
+                    )
+                }
+                PhotoActions(
+                    label = leg.toStop.title,
+                    onAddPhotos = { onAddPhotos(leg.toStop) },
+                    onOpenPhotos = { onOpenPhotos(leg.toStop) },
+                )
             }
         }
     }
@@ -303,6 +323,8 @@ private fun MapStopCard(
     index: Int,
     focusedItemId: String?,
     onFocus: () -> Unit,
+    onAddPhotos: () -> Unit,
+    onOpenPhotos: () -> Unit,
 ) {
     val context = LocalContext.current
     val isFocused = stop.itemId == focusedItemId
@@ -337,8 +359,24 @@ private fun MapStopCard(
                         contentPadding = PaddingValues(0.dp),
                     ) { Text(if (stop.mapLinks.amap != null) "高德地图" else "百度地图") }
                 }
+                PhotoActions(null, onAddPhotos, onOpenPhotos)
             }
         }
+    }
+}
+
+@Composable
+private fun PhotoActions(label: String?, onAddPhotos: () -> Unit, onOpenPhotos: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        label?.let {
+            Text(it, modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        }
+        TextButton(onClick = onAddPhotos, contentPadding = PaddingValues(0.dp)) { Text("＋ 添加照片") }
+        TextButton(onClick = onOpenPhotos) { Text("查看照片") }
     }
 }
 

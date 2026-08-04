@@ -5,9 +5,15 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,14 +30,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -74,6 +85,8 @@ fun PlanLibraryScreen(
     onImport: (Uri) -> Unit,
     onOpenPlan: (Long) -> Unit,
     onDeletePlans: (Set<Long>) -> Unit = {},
+    onSetArchived: (Set<Long>, Boolean) -> Unit = { _, _ -> },
+    reduceMotion: Boolean = false,
     transitionScopes: PlanSharedTransitionScopes? = null,
     sharedBoundsEnabled: Boolean = false,
 ) {
@@ -81,11 +94,15 @@ fun PlanLibraryScreen(
         uri?.let(onImport)
     }
     var managing by remember { mutableStateOf(false) }
+    var board by remember { mutableStateOf(TravelBoard.PLANS) }
     var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
     var pendingDelete by remember { mutableStateOf<Set<Long>?>(null) }
-    val planIds = remember(plans) { plans.map { it.id } }
+    val boardPlans = remember(board, plans) { TravelBoardPolicy.plansFor(board, plans) }
+    val planIds = remember(boardPlans) { boardPlans.map { it.id } }
+    val planGridState = rememberLazyGridState()
+    val footprintGridState = rememberLazyGridState()
 
-    LaunchedEffect(planIds) {
+    LaunchedEffect(board, planIds) {
         selectedIds = selectedIds.intersect(planIds.toSet())
         if (planIds.isEmpty()) managing = false
     }
@@ -95,12 +112,28 @@ fun PlanLibraryScreen(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(Modifier.weight(1f)) {
-                Text("计划库", style = MaterialTheme.typography.headlineLarge)
-                Text("把每一次出发，装进一张卡片", color = Coral, style = MaterialTheme.typography.labelLarge)
+            Column(
+                Modifier
+                    .weight(1f)
+                    .clickable {
+                        board = if (board == TravelBoard.PLANS) TravelBoard.FOOTPRINTS else TravelBoard.PLANS
+                        selectedIds = emptySet()
+                        managing = false
+                    },
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(board.title, style = MaterialTheme.typography.headlineLarge)
+                    Icon(
+                        Icons.Filled.SwapHoriz,
+                        contentDescription = "切换计划板和足迹板",
+                        tint = Coral,
+                        modifier = Modifier.padding(start = 6.dp).size(24.dp),
+                    )
+                }
+                Text(board.subtitle, color = Coral, style = MaterialTheme.typography.labelLarge)
             }
             TextButton(
-                enabled = plans.isNotEmpty(),
+                enabled = boardPlans.isNotEmpty(),
                 onClick = {
                     managing = !managing
                     selectedIds = emptySet()
@@ -126,6 +159,20 @@ fun PlanLibraryScreen(
                 androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
                 TextButton(
                     enabled = selectedIds.isNotEmpty(),
+                    onClick = {
+                        onSetArchived(selectedIds, TravelBoardPolicy.archiveValue(board))
+                        selectedIds = emptySet()
+                        managing = false
+                    },
+                ) {
+                    Icon(
+                        if (board == TravelBoard.PLANS) Icons.Filled.Archive else Icons.Filled.Unarchive,
+                        contentDescription = null,
+                    )
+                    Text(if (board == TravelBoard.PLANS) "归档" else "移回计划板")
+                }
+                TextButton(
+                    enabled = selectedIds.isNotEmpty(),
                     onClick = { pendingDelete = selectedIds },
                 ) {
                     Icon(Icons.Filled.Delete, contentDescription = null)
@@ -133,33 +180,64 @@ fun PlanLibraryScreen(
                 }
             }
         }
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            item(key = "add") {
-                AddPlanCard {
-                    launcher.launch(arrayOf("text/html", "application/xhtml+xml", "application/octet-stream"))
+        AnimatedContent(
+            targetState = board,
+            modifier = Modifier.weight(1f),
+            transitionSpec = {
+                if (reduceMotion) {
+                    fadeIn(tween(90)) togetherWith fadeOut(tween(90))
+                } else {
+                    val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                    (slideInHorizontally(tween(280)) { width -> direction * width / 3 } + fadeIn(tween(220))) togetherWith
+                        (slideOutHorizontally(tween(280)) { width -> -direction * width / 3 } + fadeOut(tween(180)))
                 }
-            }
-            items(plans, key = { it.id }) { plan ->
-                PlanPreviewCard(
-                    plan = plan,
-                    managing = managing,
-                    selected = plan.id in selectedIds,
-                    transitionScopes = transitionScopes,
-                    sharedBoundsEnabled = sharedBoundsEnabled,
-                    onClick = {
-                        if (managing) {
-                            selectedIds = PlanSelectionPolicy.toggle(selectedIds, plan.id)
-                        } else {
-                            onOpenPlan(plan.id)
+            },
+            label = "旅笺板切换",
+        ) { visibleBoard ->
+            val visiblePlans = TravelBoardPolicy.plansFor(visibleBoard, plans)
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                state = if (visibleBoard == TravelBoard.PLANS) planGridState else footprintGridState,
+                contentPadding = PaddingValues(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                if (visibleBoard == TravelBoard.PLANS) {
+                    item(key = "add") {
+                        AddPlanCard {
+                            launcher.launch(arrayOf("text/html", "application/xhtml+xml", "application/octet-stream"))
                         }
-                    },
-                )
+                    }
+                }
+                if (visiblePlans.isEmpty() && visibleBoard == TravelBoard.FOOTPRINTS) {
+                    item(key = "empty-footprints", span = { GridItemSpan(maxLineSpan) }) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 56.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text("走过的旅程会收在这里", style = MaterialTheme.typography.titleLarge)
+                            Text("从计划板的管理模式归档旅程", color = Ink.copy(alpha = .58f))
+                        }
+                    }
+                }
+                items(visiblePlans, key = { it.id }) { plan ->
+                    PlanPreviewCard(
+                        plan = plan,
+                        managing = managing,
+                        selected = plan.id in selectedIds,
+                        transitionScopes = transitionScopes,
+                        sharedBoundsEnabled = sharedBoundsEnabled,
+                        modifier = Modifier.animateItem(),
+                        onClick = {
+                            if (managing) {
+                                selectedIds = PlanSelectionPolicy.toggle(selectedIds, plan.id)
+                            } else {
+                                onOpenPlan(plan.id)
+                            }
+                        },
+                    )
+                }
             }
         }
     }
@@ -174,7 +252,7 @@ fun PlanLibraryScreen(
                     onDeletePlans(ids)
                     selectedIds = emptySet()
                     pendingDelete = null
-                    if (ids.size == plans.size) managing = false
+                    if (ids.size == boardPlans.size) managing = false
                 }) { Text("删除", color = Coral, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
@@ -209,6 +287,7 @@ private fun PlanPreviewCard(
     selected: Boolean,
     transitionScopes: PlanSharedTransitionScopes?,
     sharedBoundsEnabled: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -224,7 +303,7 @@ private fun PlanPreviewCard(
         else -> "${dayLabels.first()} – ${dayLabels.last()}"
     }
     Column(
-        modifier = Modifier
+        modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .semantics(mergeDescendants = true) {
                 contentDescription = "${plan.parsed.title}折角便签"

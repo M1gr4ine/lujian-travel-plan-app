@@ -39,7 +39,10 @@ class ThumbnailWorker(
         val html = withContext(Dispatchers.IO) {
             if (rawFile.isFile) EncodingDetector.decode(rawFile.readBytes()).text else ""
         }
-        val customCover = withContext(Dispatchers.IO) { loadCustomCover() }
+        val customCoverPath = inputData.getString(INPUT_CUSTOM_COVER_PATH)
+            ?.takeIf { it.isNotBlank() }
+            ?: stored.customCoverPath
+        val customCover = withContext(Dispatchers.IO) { loadCustomCover(customCoverPath) }
         val titleCoverHtml = if (html.isBlank()) null else HtmlTitleCoverExtractor.extract(html)
         val coverText = if (html.isBlank()) null else HtmlTitleCoverExtractor.extractText(html)
         val bitmap = customCover ?: coverText?.let(::coverTextThumbnail) ?: withTimeoutOrNull(6_000) {
@@ -61,10 +64,10 @@ class ThumbnailWorker(
         }
     }
 
-    private fun loadCustomCover(): Bitmap? {
-        val relativePath = inputData.getString(INPUT_CUSTOM_COVER_PATH)?.takeIf { it.isNotBlank() } ?: return null
+    private fun loadCustomCover(relativePath: String?): Bitmap? {
+        val safePath = relativePath?.takeIf { it.isNotBlank() } ?: return null
         val filesRoot = applicationContext.filesDir.canonicalFile
-        val coverFile = File(filesRoot, relativePath).canonicalFile
+        val coverFile = File(filesRoot, safePath).canonicalFile
         if (!coverFile.path.startsWith(filesRoot.path + File.separator) || !coverFile.isFile) return null
         return BitmapFactory.decodeFile(coverFile.absolutePath)
     }

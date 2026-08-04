@@ -41,6 +41,7 @@ enum class PlanReaderPage(val label: String) {
     ITINERARY("🗓️ 行程"),
     MAP("🗺️ 地图"),
     BUDGET("💰 预算"),
+    ALBUM("📷 相册"),
 }
 
 data class PlanReaderDayAction(
@@ -53,7 +54,9 @@ object PlanReaderDayPolicy {
         val selected = requestedIndex.coerceIn(0, (dayCount - 1).coerceAtLeast(0))
         return PlanReaderDayAction(
             selectedIndex = selected,
-            pagerTarget = selected.takeIf { activePage != PlanReaderPage.BUDGET },
+            pagerTarget = selected.takeIf {
+                activePage == PlanReaderPage.ITINERARY || activePage == PlanReaderPage.MAP
+            },
         )
     }
 }

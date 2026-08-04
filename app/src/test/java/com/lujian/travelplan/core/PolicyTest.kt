@@ -181,9 +181,9 @@ class PolicyTest {
     }
 
     @Test
-    fun `原生计划阅读器提供行程地图与预算页签`() {
+    fun `原生计划阅读器提供行程地图预算与相册页签`() {
         assertEquals(
-            listOf("🗓️ 行程", "🗺️ 地图", "💰 预算"),
+            listOf("🗓️ 行程", "🗺️ 地图", "💰 预算", "📷 相册"),
             PlanReaderPage.entries.map { it.label },
         )
     }
@@ -205,6 +205,10 @@ class PolicyTest {
         assertEquals(1, mapAction.pagerTarget)
         assertEquals(3, itineraryAction.selectedIndex)
         assertEquals(3, itineraryAction.pagerTarget)
+        assertEquals(
+            null,
+            PlanReaderDayPolicy.select(2, 5, PlanReaderPage.ALBUM).pagerTarget,
+        )
     }
 
     @Test

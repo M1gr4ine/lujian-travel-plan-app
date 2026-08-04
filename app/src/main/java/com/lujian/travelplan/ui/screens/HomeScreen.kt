@@ -277,7 +277,7 @@ private fun MapLibreSurface(
                     if (!timedOut) CircularProgressIndicator(color = Coral)
                     LujianPinMark(Modifier.height(36.dp).fillMaxWidth())
                     Text(if (timedOut) "地图暂时没有连上" else "正在展开地图", style = MaterialTheme.typography.titleLarge)
-                    Text("本地计划仍可从计划库正常阅读", style = MaterialTheme.typography.bodyMedium)
+                    Text("本地计划仍可从旅笺板正常阅读", style = MaterialTheme.typography.bodyMedium)
                     if (timedOut) IconButton(onClick = onRetry) {
                         Icon(Icons.Filled.Refresh, contentDescription = "重试地图", tint = Ink)
                     }

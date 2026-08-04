@@ -4,6 +4,7 @@ package com.lujian.travelplan.ui.screens
 
 import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -68,6 +69,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lujian.travelplan.data.PlanRepository
+import com.lujian.travelplan.data.PlanPhoto
 import com.lujian.travelplan.data.StoredPlan
 import com.lujian.travelplan.export.MobileHtmlGenerator
 import com.lujian.travelplan.model.PlanCapability
@@ -103,6 +105,19 @@ fun PlanDetailScreen(
     val scope = rememberCoroutineScope()
     var menuOpen by remember { mutableStateOf(false) }
     var deleteDialog by remember { mutableStateOf(false) }
+    var photoPin by remember { mutableStateOf<PhotoPin?>(null) }
+    var photoError by remember { mutableStateOf<String?>(null) }
+    val photoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(50),
+    ) { uris ->
+        val pin = photoPin
+        photoPin = null
+        if (pin != null && uris.isNotEmpty()) {
+            scope.launch {
+                photoError = repository.addPhotos(plan.id, pin.id, pin.title, uris).exceptionOrNull()?.message
+            }
+        }
+    }
     val exporter = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/html"),
     ) { uri ->
@@ -172,7 +187,19 @@ fun PlanDetailScreen(
         },
     ) { padding ->
         if (plan.parsed.capability == PlanCapability.ENHANCED && plan.parsed.days.isNotEmpty()) {
-            NativePlanReader(plan, Modifier.padding(padding))
+            NativePlanReader(
+                plan = plan,
+                modifier = Modifier.padding(padding),
+                onAddPhotos = { pin ->
+                    photoPin = pin
+                    photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                },
+                onRemovePhoto = { photo ->
+                    scope.launch {
+                        photoError = repository.removePhoto(plan.id, photo.id).exceptionOrNull()?.message
+                    }
+                },
+            )
         } else {
             Column(Modifier.padding(padding).fillMaxSize()) {
                 PaperCard(Modifier.fillMaxWidth().padding(16.dp), background = Gold.copy(alpha = .35f)) {
@@ -200,10 +227,23 @@ fun PlanDetailScreen(
             dismissButton = { TextButton(onClick = { deleteDialog = false }) { Text("取消") } },
         )
     }
+    photoError?.let { message ->
+        AlertDialog(
+            onDismissRequest = { photoError = null },
+            title = { Text("照片处理失败") },
+            text = { Text(message) },
+            confirmButton = { TextButton(onClick = { photoError = null }) { Text("知道了") } },
+        )
+    }
 }
 
 @Composable
-internal fun NativePlanReader(plan: StoredPlan, modifier: Modifier = Modifier) {
+internal fun NativePlanReader(
+    plan: StoredPlan,
+    modifier: Modifier = Modifier,
+    onAddPhotos: (PhotoPin) -> Unit = {},
+    onRemovePhoto: (PlanPhoto) -> Unit = {},
+) {
     val days = plan.parsed.days
     val pagerState = rememberPagerState(pageCount = { days.size })
     val dateListState = rememberLazyListState()
@@ -211,6 +251,7 @@ internal fun NativePlanReader(plan: StoredPlan, modifier: Modifier = Modifier) {
     var activePage by remember { mutableStateOf(PlanReaderPage.ITINERARY) }
     var focusedItemId by remember { mutableStateOf<String?>(null) }
     var mapDragEnabled by remember { mutableStateOf(false) }
+    var galleryPinId by remember { mutableStateOf<String?>(null) }
     var selectedDayIndex by rememberSaveable { mutableIntStateOf(0) }
     var lastPagerPage by remember { mutableIntStateOf(pagerState.currentPage) }
 
@@ -227,7 +268,10 @@ internal fun NativePlanReader(plan: StoredPlan, modifier: Modifier = Modifier) {
 
     LaunchedEffect(activePage) {
         if (activePage != PlanReaderPage.MAP) mapDragEnabled = false
-        if (activePage != PlanReaderPage.BUDGET && pagerState.currentPage != selectedDayIndex) {
+        if (
+            activePage in setOf(PlanReaderPage.ITINERARY, PlanReaderPage.MAP) &&
+            pagerState.currentPage != selectedDayIndex
+        ) {
             pagerState.scrollToPage(selectedDayIndex)
         }
     }
@@ -243,12 +287,13 @@ internal fun NativePlanReader(plan: StoredPlan, modifier: Modifier = Modifier) {
         }
         PlanReaderTabs(activePage) { page ->
             activePage = page
+            if (page == PlanReaderPage.ALBUM) galleryPinId = null
             if (page != PlanReaderPage.MAP) {
                 focusedItemId = null
                 mapDragEnabled = false
             }
         }
-        if (activePage != PlanReaderPage.BUDGET) {
+        if (activePage == PlanReaderPage.ITINERARY || activePage == PlanReaderPage.MAP) {
             LazyRow(
                 state = dateListState,
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
@@ -288,6 +333,11 @@ internal fun NativePlanReader(plan: StoredPlan, modifier: Modifier = Modifier) {
                         focusedItemId = itemId
                         activePage = PlanReaderPage.MAP
                     },
+                    onAddPhotos = { item -> onAddPhotos(PhotoPin(item.id, item.title)) },
+                    onOpenPhotos = { item ->
+                        galleryPinId = item.id
+                        activePage = PlanReaderPage.ALBUM
+                    },
                 )
             }
             PlanReaderPage.MAP -> HorizontalPager(
@@ -302,10 +352,22 @@ internal fun NativePlanReader(plan: StoredPlan, modifier: Modifier = Modifier) {
                     onDragEnabledChange = { enabled ->
                         if (page == pagerState.currentPage) mapDragEnabled = enabled
                     },
+                    onAddPhotos = { stop -> onAddPhotos(PhotoPin(stop.itemId, stop.title)) },
+                    onOpenPhotos = { stop ->
+                        galleryPinId = stop.itemId
+                        activePage = PlanReaderPage.ALBUM
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
             PlanReaderPage.BUDGET -> BudgetPage(plan.parsed, Modifier.fillMaxSize())
+            PlanReaderPage.ALBUM -> PlanGalleryScreen(
+                plan = plan,
+                initialPinId = galleryPinId,
+                onAddPhotos = onAddPhotos,
+                onRemovePhoto = onRemovePhoto,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 }
@@ -338,7 +400,13 @@ private fun PlanReaderTabs(activePage: PlanReaderPage, onSelect: (PlanReaderPage
 }
 
 @Composable
-private fun DayPage(day: PlanDayDraft, sections: List<PlanSectionDraft>, onShowMap: (String) -> Unit) {
+private fun DayPage(
+    day: PlanDayDraft,
+    sections: List<PlanSectionDraft>,
+    onShowMap: (String) -> Unit,
+    onAddPhotos: (PlanItemDraft) -> Unit,
+    onOpenPhotos: (PlanItemDraft) -> Unit,
+) {
     LazyColumn(
         contentPadding = PaddingValues(18.dp, 18.dp, 18.dp, 42.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -349,7 +417,7 @@ private fun DayPage(day: PlanDayDraft, sections: List<PlanSectionDraft>, onShowM
             Text(day.title, style = MaterialTheme.typography.headlineMedium)
         }
         items(day.items.size, key = { day.items[it].id }) { index ->
-            ItineraryCard(day.items[index], index, onShowMap)
+            ItineraryCard(day.items[index], index, onShowMap, onAddPhotos, onOpenPhotos)
         }
         if (day.items.isEmpty()) {
             item { Text("这一天还没有行程，进入编辑模式添加。", style = MaterialTheme.typography.bodyLarge) }
@@ -371,7 +439,13 @@ private fun DayPage(day: PlanDayDraft, sections: List<PlanSectionDraft>, onShowM
 }
 
 @Composable
-private fun ItineraryCard(item: PlanItemDraft, index: Int, onShowMap: (String) -> Unit) {
+private fun ItineraryCard(
+    item: PlanItemDraft,
+    index: Int,
+    onShowMap: (String) -> Unit,
+    onAddPhotos: (PlanItemDraft) -> Unit,
+    onOpenPhotos: (PlanItemDraft) -> Unit,
+) {
     var expanded by remember(item.id) { mutableStateOf(false) }
     PaperCard(
         modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
@@ -411,6 +485,13 @@ private fun ItineraryCard(item: PlanItemDraft, index: Int, onShowMap: (String) -
                         onClick = { onShowMap(item.id) },
                         contentPadding = PaddingValues(0.dp),
                     ) { Text("🗺️ 在每日地图中查看") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TextButton(
+                            onClick = { onAddPhotos(item) },
+                            contentPadding = PaddingValues(0.dp),
+                        ) { Text("＋ 添加照片") }
+                        TextButton(onClick = { onOpenPhotos(item) }) { Text("查看照片") }
+                    }
                 } else {
                     Spacer(Modifier.height(8.dp))
                     Text("展开详情 ↓", color = Coral, style = MaterialTheme.typography.labelMedium)

@@ -35,6 +35,21 @@ interface PlanDao {
     @Query("UPDATE plans SET thumbnailPath = :path WHERE id = :planId")
     suspend fun updateThumbnail(planId: Long, path: String)
 
+    @Query("UPDATE plans SET archivedAt = :archivedAt WHERE id IN (:planIds)")
+    suspend fun updateArchivedAt(planIds: Set<Long>, archivedAt: Long?)
+
+    @Query("UPDATE plans SET customCoverPath = :path, customCoverAddedAt = :addedAt WHERE id = :planId")
+    suspend fun updateCustomCover(planId: Long, path: String?, addedAt: Long?)
+
+    @Insert
+    suspend fun insertPhotos(photos: List<PlanPhotoEntity>): List<Long>
+
+    @Query("SELECT * FROM plan_photos WHERE planId = :planId AND id = :photoId LIMIT 1")
+    suspend fun findPhoto(planId: Long, photoId: Long): PlanPhotoEntity?
+
+    @Query("DELETE FROM plan_photos WHERE id = :photoId")
+    suspend fun deletePhoto(photoId: Long)
+
     @Insert
     suspend fun insertDay(day: PlanDayEntity): Long
 

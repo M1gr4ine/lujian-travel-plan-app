@@ -1,16 +1,23 @@
 package com.lujian.travelplan.data
 
 import android.content.Context
+import android.net.Uri
 import androidx.room.withTransaction
+import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.lujian.travelplan.data.db.DestinationEntity
 import com.lujian.travelplan.data.db.LujianDatabase
 import com.lujian.travelplan.data.db.PlanDayEntity
 import com.lujian.travelplan.data.db.PlanDestinationCrossRef
 import com.lujian.travelplan.data.db.PlanEntity
 import com.lujian.travelplan.data.db.PlanItemEntity
+import com.lujian.travelplan.data.db.PlanPhotoEntity
 import com.lujian.travelplan.data.db.PlanWithDetails
 import com.lujian.travelplan.export.MobileHtmlGenerator
 import com.lujian.travelplan.importing.LocationCandidate
+import com.lujian.travelplan.importing.ThumbnailWorker
 import com.lujian.travelplan.model.DestinationDraft
 import com.lujian.travelplan.model.ParsedPlan
 import com.lujian.travelplan.model.PlanCapability
@@ -24,6 +31,8 @@ import com.lujian.travelplan.model.PlanSectionDraft
 import java.io.File
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -37,6 +46,19 @@ data class StoredPlan(
     val compatibilityMode: Boolean,
     val dataRevision: Int = CURRENT_PLAN_DATA_REVISION,
     val updatedAt: Long,
+    val archivedAt: Long? = null,
+    val customCoverPath: String? = null,
+    val customCoverAddedAt: Long? = null,
+    val photos: List<PlanPhoto> = emptyList(),
+)
+
+data class PlanPhoto(
+    val id: Long,
+    val pinId: String,
+    val pinTitle: String,
+    val relativePath: String,
+    val addedAt: Long,
+    val displayName: String?,
 )
 
 const val CURRENT_PLAN_DATA_REVISION = 5
@@ -54,6 +76,7 @@ class PlanRepository(
     private val database: LujianDatabase,
 ) {
     private val dao = database.planDao()
+    private val mediaStore = PlanMediaStore(context.filesDir, ContentResolverImageSource(context.contentResolver))
 
     fun observePlans(): Flow<List<StoredPlan>> = dao.observeAll().map { list ->
         list.map { it.toStoredPlan() }
@@ -64,6 +87,84 @@ class PlanRepository(
     suspend fun getPlansOnce(): List<StoredPlan> = dao.getAll().map { it.toStoredPlan() }
 
     suspend fun findDuplicate(sha256: String): PlanEntity? = dao.findByHash(sha256)
+
+    suspend fun setArchived(planIds: Set<Long>, archived: Boolean) {
+        if (planIds.isEmpty()) return
+        dao.updateArchivedAt(planIds, System.currentTimeMillis().takeIf { archived })
+    }
+
+    suspend fun setCustomCover(planId: Long, uri: Uri): Result<Unit> = runCatching {
+        val stored = dao.findById(planId)?.plan ?: error("计划不存在")
+        val copied = withContext(Dispatchers.IO) { mediaStore.copyCover(planId, uri) }
+        try {
+            dao.updateCustomCover(planId, copied.relativePath, System.currentTimeMillis())
+        } catch (error: Throwable) {
+            copied.file.delete()
+            throw error
+        }
+        withContext(Dispatchers.IO) {
+            stored.customCoverPath
+                ?.takeIf { it != copied.relativePath }
+                ?.let(mediaStore::deletePrivateFile)
+        }
+        enqueueThumbnail(planId, stored.title)
+    }
+
+    suspend fun clearCustomCover(planId: Long): Result<Unit> = runCatching {
+        val stored = dao.findById(planId)?.plan ?: error("计划不存在")
+        dao.updateCustomCover(planId, null, null)
+        withContext(Dispatchers.IO) { mediaStore.deletePrivateFile(stored.customCoverPath) }
+        enqueueThumbnail(planId, stored.title)
+    }
+
+    suspend fun addPhotos(
+        planId: Long,
+        pinId: String,
+        pinTitle: String,
+        uris: List<Uri>,
+    ): Result<List<PlanPhoto>> = runCatching {
+        require(pinId.isNotBlank()) { "照片必须关联有效地点" }
+        require(pinTitle.isNotBlank()) { "地点名称不能为空" }
+        if (dao.findById(planId) == null) error("计划不存在")
+        val copied = mutableListOf<CopiedPlanImage>()
+        try {
+            withContext(Dispatchers.IO) {
+                uris.forEach { uri -> copied += mediaStore.copyPhoto(planId, pinId, uri) }
+            }
+            val now = System.currentTimeMillis()
+            val entities = copied.mapIndexed { index, image ->
+                PlanPhotoEntity(
+                    planId = planId,
+                    pinId = pinId,
+                    pinTitle = pinTitle,
+                    relativePath = image.relativePath,
+                    addedAt = now + index,
+                    displayName = image.displayName,
+                )
+            }
+            val ids = dao.insertPhotos(entities)
+            ids.zip(entities).map { (id, entity) ->
+                PlanPhoto(
+                    id = id,
+                    pinId = entity.pinId,
+                    pinTitle = entity.pinTitle,
+                    relativePath = entity.relativePath,
+                    addedAt = entity.addedAt,
+                    displayName = entity.displayName,
+                )
+            }
+        } catch (error: Throwable) {
+            withContext(Dispatchers.IO) { copied.forEach { it.file.delete() } }
+            throw error
+        }
+    }
+
+    suspend fun removePhoto(planId: Long, photoId: Long): Result<Unit> = runCatching {
+        val photo = dao.findPhoto(planId, photoId) ?: error("照片不存在")
+        dao.deletePhoto(photo.id)
+        withContext(Dispatchers.IO) { mediaStore.deletePrivateFile(photo.relativePath) }
+        Unit
+    }
 
     suspend fun insertImported(
         parsed: ParsedPlan,
@@ -187,10 +288,13 @@ class PlanRepository(
                         stored.plan.rawPath,
                         stored.plan.generatedPath,
                         stored.plan.thumbnailPath,
+                        stored.plan.customCoverPath,
                     )
+                        .plus(stored.photos.map(PlanPhotoEntity::relativePath))
                 }
         }
         files.map { File(context.filesDir, it) }.forEach { file -> file.delete() }
+        withContext(Dispatchers.IO) { planIds.forEach(mediaStore::deletePlanDirectory) }
     }
 
     fun htmlFile(plan: StoredPlan, original: Boolean): File = File(
@@ -247,6 +351,18 @@ class PlanRepository(
         dao.deleteDays(planId)
         dao.deleteCrossRefs(planId)
         if (destinationIds.isNotEmpty()) dao.deleteDestinations(destinationIds)
+    }
+
+    private fun enqueueThumbnail(planId: Long, title: String) {
+        val input = Data.Builder()
+            .putLong("planId", planId)
+            .putString("title", title)
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "thumbnail-$planId",
+            ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<ThumbnailWorker>().setInputData(input).build(),
+        )
     }
 }
 
@@ -312,6 +428,21 @@ private fun PlanWithDetails.toStoredPlan(): StoredPlan {
     compatibilityMode = plan.compatibilityMode,
     dataRevision = extras.dataRevision,
     updatedAt = plan.updatedAt,
+    archivedAt = plan.archivedAt,
+    customCoverPath = plan.customCoverPath,
+    customCoverAddedAt = plan.customCoverAddedAt,
+    photos = photos
+        .sortedByDescending(PlanPhotoEntity::addedAt)
+        .map { photo ->
+            PlanPhoto(
+                id = photo.id,
+                pinId = photo.pinId,
+                pinTitle = photo.pinTitle,
+                relativePath = photo.relativePath,
+                addedAt = photo.addedAt,
+                displayName = photo.displayName,
+            )
+        },
 )
 }
 

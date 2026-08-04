@@ -2,6 +2,9 @@
 
 package com.lujian.travelplan.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -49,7 +52,14 @@ fun EditPlanScreen(
 ) {
     var draft by remember(plan.updatedAt) { mutableStateOf(plan.parsed) }
     var saving by remember { mutableStateOf(false) }
+    var coverMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            coverMessage = repository.setCustomCover(plan.id, uri).exceptionOrNull()?.message
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -79,6 +89,23 @@ fun EditPlanScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp, 10.dp, 16.dp, 48.dp),
         ) {
+            item {
+                CoverEditorCard(
+                    customCoverPath = plan.customCoverPath,
+                    thumbnailPath = plan.thumbnailPath,
+                    onChoose = {
+                        coverPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    },
+                    onClear = {
+                        scope.launch {
+                            coverMessage = repository.clearCustomCover(plan.id).exceptionOrNull()?.message
+                        }
+                    },
+                )
+            }
+            coverMessage?.let { message ->
+                item { Text(message, color = MaterialTheme.colorScheme.error) }
+            }
             item {
                 OutlinedTextField(
                     value = draft.title,

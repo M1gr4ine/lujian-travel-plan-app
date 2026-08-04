@@ -24,6 +24,31 @@ data class PlanEntity(
     val sectionsJson: String,
     val createdAt: Long,
     val updatedAt: Long,
+    val archivedAt: Long? = null,
+    val customCoverPath: String? = null,
+    val customCoverAddedAt: Long? = null,
+)
+
+@Entity(
+    tableName = "plan_photos",
+    foreignKeys = [
+        ForeignKey(
+            entity = PlanEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["planId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("planId"), Index(value = ["planId", "pinId"])],
+)
+data class PlanPhotoEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val planId: Long,
+    val pinId: String,
+    val pinTitle: String,
+    val relativePath: String,
+    val addedAt: Long,
+    val displayName: String?,
 )
 
 @Entity(
@@ -129,4 +154,6 @@ data class PlanWithDetails(
         ),
     )
     val destinations: List<DestinationEntity>,
+    @Relation(parentColumn = "id", entityColumn = "planId")
+    val photos: List<PlanPhotoEntity>,
 )
