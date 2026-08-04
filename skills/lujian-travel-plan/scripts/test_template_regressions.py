@@ -9,15 +9,22 @@ from create_static_html import build_html, build_lujian_payload
 
 
 class StaticCoverParser(HTMLParser):
-    """提取安卓无脚本缩略图使用的静态封面文案。"""
+    """提取安卓无脚本缩略图使用的完整静态封面。"""
 
     _VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+    _FIELD_CLASSES = {"brand-title": "brand_title", "brand-sub": "brand_sub"}
 
     def __init__(self) -> None:
         super().__init__()
         self.cover_count = 0
         self._depth = 0
         self._parts: list[str] = []
+        self._field_depths: dict[str, int] = {}
+        self._field_parts: dict[str, list[str]] = {
+            "brand_title": [],
+            "brand_sub": [],
+            "headline": [],
+        }
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
@@ -27,19 +34,35 @@ class StaticCoverParser(HTMLParser):
         elif "data-lujian-cover" in attributes:
             self.cover_count += 1
             self._depth = 1
+        if not self._depth:
+            return
+        classes = set((attributes.get("class") or "").split())
+        for class_name, field in self._FIELD_CLASSES.items():
+            if class_name in classes:
+                self._field_depths[field] = self._depth
+        if tag == "h1":
+            self._field_depths["headline"] = self._depth
 
     def handle_endtag(self, tag: str) -> None:
-        if self._depth:
-            self._depth -= 1
+        if not self._depth:
+            return
+        ended_fields = [field for field, depth in self._field_depths.items() if depth == self._depth]
+        for field in ended_fields:
+            del self._field_depths[field]
+        self._depth -= 1
 
     def handle_data(self, data: str) -> None:
         if self._depth:
             self._parts.append(data)
+            for field in self._field_depths:
+                self._field_parts[field].append(data)
 
     @property
     def text(self) -> str:
         return "".join(self._parts).strip()
 
+    def field_text(self, field: str) -> str:
+        return "".join(self._field_parts[field]).strip()
 
 def fixture(day_count: int) -> dict:
     places = []
@@ -85,6 +108,7 @@ def fixture(day_count: int) -> dict:
         "trip": {
             "destination": "大连",
             "dayCount": day_count,
+            "coverSubtitle": "9月24日晚出发 · 5天4晚 · SOLO TRIP",
             "style": "慢游 · 美食",
             "transportPlans": [
                 {
@@ -135,10 +159,15 @@ def main() -> int:
     cover = StaticCoverParser()
     cover.feed(html)
 
+    require(five["title"] == "大连旅行计划", "计划库标题不应混入天/晚数")
     require(five["headline"] == "五天说走就走，把大连吃个痛快。", "五天美食主标题回归")
     require(six["headline"] == "六天说走就走，把大连吃个痛快。", "六天美食主标题回归")
+    require("coverTitle" not in five, "封面计划名不得与计划 title 分成两个字段")
+    require(five.get("coverSubtitle") == "9月24日晚出发 · 5天4晚 · SOLO TRIP", "安卓封面副标题未进入旅笺载荷")
     require(cover.cover_count == 1, "安卓无脚本预览必须有且仅有一个静态封面节点")
-    require(cover.text == five["headline"], "安卓无脚本预览未静态输出完整主标题")
+    require(cover.field_text("brand_title") == five["title"], "安卓静态封面未输出计划名")
+    require(cover.field_text("brand_sub") == five.get("coverSubtitle"), "安卓静态封面未输出副标题")
+    require(cover.field_text("headline") == five["headline"], "安卓静态封面未输出完整主标题")
     require("renderHeadline($('plan-title'))" in html, "手机端未使用共享主标题")
     require("renderHeadline($('desktop-hero-title'))" in html, "桌面端未使用共享主标题")
     require("font:900 20px/1" in html, "笺字图标未固定加粗")

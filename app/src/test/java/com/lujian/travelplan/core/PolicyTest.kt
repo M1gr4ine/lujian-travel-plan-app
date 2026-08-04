@@ -59,6 +59,26 @@ class PolicyTest {
     }
 
     @Test
+    fun `显式封面提取计划名副标题和分行主标题`() {
+        val html = """
+            <html><body>
+            <header class="hero" data-lujian-cover>
+              <div class="brand-title">大连旅行计划</div>
+              <div class="brand-sub">9月24日晚出发 · 5天4晚 · SOLO TRIP</div>
+              <h1>五天说走就走，<br>把大连吃个痛快。</h1>
+              <button>不应进入封面</button>
+            </header>
+            </body></html>
+        """.trimIndent()
+
+        val cover = HtmlTitleCoverExtractor.extractText(html)
+
+        assertEquals("大连旅行计划", cover!!.brandTitle)
+        assertEquals("9月24日晚出发 · 5天4晚 · SOLO TRIP", cover.brandSub)
+        assertEquals(listOf("五天说走就走，", "把大连吃个痛快。"), cover.headlineLines)
+    }
+
+    @Test
     fun `没有境外目的地时使用中国视野`() {
         val destinations = listOf(DestinationDraft("大连", "CN", 38.914, 121.614))
 

@@ -1,8 +1,11 @@
 {
   "trip": {
     "destination": "",
+    "title": "",
     "destinationEn": "",
     "headline": "",
+
+    "coverSubtitle": "",
     "destinations": [
       {
         "name": "",

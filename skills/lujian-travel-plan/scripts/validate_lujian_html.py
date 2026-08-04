@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
@@ -167,7 +168,10 @@ def main() -> int:
         "mobile app": r'class="mobile-app app-shell paper"',
         "mobile sticky date axis": r'class="date-axis-wrap"',
         "mobile single day renderer": r'class="day-panel"',
-        "static Android cover headline": r'<h1 id="plan-title" data-lujian-cover>.+?</h1>',
+        "static Android cover block": r'<header class="hero" data-lujian-cover>',
+        "static Android cover brand title": r'class="brand-title">[^<]+</',
+        "static Android cover brand subtitle": r'class="brand-sub">[^<]+</',
+        "static Android cover headline": r'<h1 id="plan-title">.+?</h1>',
         "date tab switch": r"function changeDay\(",
         "swipe start": r"touchstart",
         "swipe end": r"touchend",
@@ -217,6 +221,12 @@ def main() -> int:
     for label, pattern in required_patterns.items():
         if not re.search(pattern, text):
             errors.append(f"missing {label}")
+    brand_title_match = re.search(r'class="brand-title">([^<]+)</', text)
+    payload_title = payload.get("title")
+    if brand_title_match and isinstance(payload_title, str):
+        brand_title = unescape(brand_title_match.group(1)).strip()
+        if brand_title != payload_title.strip():
+            errors.append("static Android cover brand title must equal payload title")
     if 'id="itinerary-data"' in text:
         errors.append("legacy itinerary-data block must not be present")
     if "static-marker-dot" in text:

@@ -24,11 +24,14 @@ Required:
 Recommended:
 
 - `dateRange`: display string or `{ "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" }`.
+- `title`: optional Android library plan name; default to `<destination>旅行计划`. Keep day/night counts in `coverSubtitle`, not in this title.
 - `travelers`: traveler count and profile.
 - `style`: food, family, citywalk, photography, museum, relaxed, budget, luxury, etc.
 - `baseArea`: hotel or preferred area.
 - `destinationEn` or `englishName`: short English/script subtitle for the mobile hero.
 - `headline` or `displayHeadline`: optional shared large headline for phone and desktop; when omitted, the 旅笺 generator derives it from day count, destination, and style.
+
+- `coverSubtitle`: optional Android library cover subtitle for reviewed departure/date/night/style copy; when omitted, derive only from known date range, day/night count, and style.
 - `destinations[]`: destination records with `name` and, only when verified, `latitude`/`longitude`. These coordinates let the live map load a destination overview when daily places lack coordinates.
 - `heroImage` or `coverImage`: remote image URL for the top hero.
 - `weather` or `weatherText`: short display text, such as `26°C` or `多云 26°C`.

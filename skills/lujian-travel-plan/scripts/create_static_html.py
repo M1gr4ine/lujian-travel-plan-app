@@ -195,13 +195,21 @@ def build_lujian_payload(data: dict[str, Any]) -> dict[str, Any]:
     day_count = trip.get("dayCount") if isinstance(trip.get("dayCount"), int) else len(days)
     destination = str(trip.get("destination") or "旅行")
     nights = first(trip.get("nightCount"), trip.get("nights"), max(day_count - 1, 0))
-    title = str(first(trip.get("title"), f"{destination} {day_count}天{nights}晚旅行计划"))
+    title = str(first(trip.get("title"), f"{destination}旅行计划"))
+    date_range = display_range(trip.get("dateRange"))
+
+    cover_subtitle_default = " · ".join(
+        str(value) for value in (date_range, f"{day_count}天{nights}晚", trip.get("style") or "旅笺") if value
+    )
+    cover_subtitle = str(first(trip.get("coverSubtitle"), cover_subtitle_default))
     return {
         "schemaVersion": 1,
         "title": title,
+
+        "coverSubtitle": cover_subtitle,
         "headline": build_headline(trip, destination, day_count),
         "destination": destination,
-        "dateRange": display_range(trip.get("dateRange")),
+        "dateRange": date_range,
         "travelers": trip.get("travelers") or "",
         "style": trip.get("style") or "",
         "baseArea": trip.get("baseArea") or "",
@@ -237,6 +245,8 @@ def build_html(data: dict[str, Any]) -> str:
     plan = build_lujian_payload(data)
     payload = json.dumps(plan, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
     title = html.escape(plan["title"], quote=True)
+
+    cover_subtitle = html.escape(plan["coverSubtitle"], quote=False)
     headline_markup = build_static_headline_html(plan)
     template = r'''<!DOCTYPE html>
 <html lang="zh-CN">
@@ -267,6 +277,9 @@ def build_html(data: dict[str, Any]) -> str:
     .hero::after{content:"";position:absolute;width:160px;height:160px;border:24px solid rgba(242,180,58,.2);border-radius:50%;right:-72px;bottom:-96px;z-index:-1}
     .hero-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
     .brand{display:flex;align-items:center;gap:10px;font-family:ui-serif,Georgia,"Noto Serif SC",serif;font-size:18px;font-weight:900}
+    .brand-copy{display:grid;gap:2px}
+    .brand-title{font:900 18px/1.05 ui-serif,Georgia,"Noto Serif SC","Songti SC",serif}
+    .brand-sub{color:var(--muted);font:600 9px/1.2 system-ui,"PingFang SC",sans-serif;letter-spacing:.08em}
     .brand-mark{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:var(--ink);color:var(--bg);font:900 20px/1 ui-serif,Georgia,"Noto Serif SC","Songti SC",serif;transform:rotate(-5deg);box-shadow:3px 3px 0 var(--gold)}
     .save-btn,.ink-btn{border:2px solid var(--ink);border-radius:999px;background:var(--ink);color:var(--bg);padding:9px 14px;font:700 12px/1 system-ui,"PingFang SC",sans-serif;cursor:pointer;box-shadow:2px 2px 0 var(--gold)}
     .save-btn:active,.ink-btn:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--gold)}
@@ -358,14 +371,14 @@ def build_html(data: dict[str, Any]) -> str:
 </head>
 <body>
   <div class="mobile-app app-shell paper">
-    <header class="hero">
+    <header class="hero" data-lujian-cover>
       <div class="hero-top">
-        <div class="brand"><span class="brand-mark">笺</span><span>旅笺</span></div>
-        <button id="save-page" class="save-btn js-save" type="button">保存页面</button>
+        <div class="brand"><span class="brand-mark">笺</span><span class="brand-copy"><strong class="brand-title">__COVER_TITLE__</strong><small class="brand-sub">__COVER_SUBTITLE__</small></span></div>
+        <button id="save-page" class="save-btn js-save" type="button" data-lujian-cover-exclude>保存页面</button>
       </div>
-      <p class="eyebrow">Travel journal · 行程手账</p>
-      <h1 id="plan-title" data-lujian-cover>__HEADLINE__</h1>
-      <div id="hero-meta" class="hero-meta"></div>
+      <p class="eyebrow" data-lujian-cover-exclude>Travel journal · 行程手账</p>
+      <h1 id="plan-title">__HEADLINE__</h1>
+      <div id="hero-meta" class="hero-meta" data-lujian-cover-exclude></div>
     </header>
     <nav class="page-tabs mobile-page-tabs" aria-label="手机页面视图"><button id="mobile-itinerary-tab" class="page-tab js-page-tab active" type="button" data-view="itinerary" aria-selected="true">行程</button><button id="mobile-map-tab" class="page-tab js-page-tab" type="button" data-view="map" aria-selected="false">地图</button></nav>
     <div class="mobile-itinerary-view" data-itinerary-view>
@@ -977,7 +990,7 @@ def build_html(data: dict[str, Any]) -> str:
 </body>
 </html>
 '''
-    return template.replace("__TITLE__", title).replace("__HEADLINE__", headline_markup).replace("__PAYLOAD__", payload)
+    return template.replace("__TITLE__", title).replace("__COVER_TITLE__", title).replace("__COVER_SUBTITLE__", cover_subtitle).replace("__HEADLINE__", headline_markup).replace("__PAYLOAD__", payload)
 
 
 def main() -> int:

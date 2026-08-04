@@ -44,14 +44,14 @@ class PlanReindexService(
                 }
             }
         plans
-            .filter { it.thumbnailPath?.endsWith("content-thumbnail-v4.png") != true }
+            .filter { it.thumbnailPath?.endsWith(ThumbnailWorker.OUTPUT_FILE_NAME) != true }
             .forEach { plan ->
                 val input = Data.Builder()
                     .putLong("planId", plan.id)
                     .putString("title", plan.parsed.title)
                     .build()
                 WorkManager.getInstance(context).enqueueUniqueWork(
-                    "content-thumbnail-v4-${plan.id}",
+                    "content-thumbnail-v7-${plan.id}",
                     ExistingWorkPolicy.KEEP,
                     OneTimeWorkRequestBuilder<ThumbnailWorker>().setInputData(input).build(),
                 )
