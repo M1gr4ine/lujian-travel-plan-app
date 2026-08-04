@@ -5,7 +5,9 @@ import com.lujian.travelplan.model.ParsedPlan
 import com.lujian.travelplan.model.PlanCapability
 import com.lujian.travelplan.model.PlanDayDraft
 import com.lujian.travelplan.model.PlanItemDraft
+import com.lujian.travelplan.model.PlanMapLegDraft
 import com.lujian.travelplan.model.PlanMapLinks
+import com.lujian.travelplan.model.PlanMapStopDraft
 import com.lujian.travelplan.model.PlanPlaceDraft
 import com.lujian.travelplan.model.PlanSectionDraft
 import org.json.JSONObject
@@ -68,6 +70,43 @@ class LujianJsonParser : PlanParser {
                         )
                     }
                 }.orEmpty()
+                val mapStops = day.optJSONArray("mapStops")?.let { stopsArray ->
+                    List(stopsArray.length()) { stopIndex -> stopsArray.optJSONObject(stopIndex) }
+                        .filterNotNull()
+                        .mapIndexed { stopIndex, stop ->
+                            val coordinates = stop.optJSONObject("coordinates")
+                            PlanMapStopDraft(
+                                id = stop.optString("id", "${day.optString("id", "day-$dayIndex")}-map-$stopIndex"),
+                                title = stop.optString("title")
+                                    .ifBlank { stop.optString("name") }
+                                    .ifBlank { "地点" },
+                                time = stop.optNullableString("time") ?: stop.optNullableString("meta"),
+                                category = stop.optNullableString("category") ?: stop.optNullableString("kind"),
+                                latitude = stop.optLatitude("latitude")
+                                    ?: coordinates?.optLatitude("latitude")
+                                    ?: coordinates?.optLatitude("lat"),
+                                longitude = stop.optLongitude("longitude")
+                                    ?: coordinates?.optLongitude("longitude")
+                                    ?: coordinates?.optLongitude("lng")
+                                    ?: coordinates?.optLongitude("lon"),
+                            )
+                        }
+                }.orEmpty()
+                val mapLegs = day.optJSONArray("mapLegs")?.let { legsArray ->
+                    List(legsArray.length()) { legIndex -> legsArray.optJSONObject(legIndex) }
+                        .mapIndexedNotNull { legIndex, leg ->
+                            val fromId = leg?.optString("from").orEmpty()
+                            val toId = leg?.optString("to").orEmpty()
+                            if (leg == null || fromId.isBlank() || toId.isBlank()) return@mapIndexedNotNull null
+                            PlanMapLegDraft(
+                                id = leg.optString("id", "leg-${legIndex + 1}"),
+                                fromId = fromId,
+                                toId = toId,
+                                mode = leg.optNullableString("mode"),
+                                summary = leg.optNullableString("summary") ?: leg.optNullableString("transport"),
+                            )
+                        }
+                }.orEmpty()
                 PlanDayDraft(
                     id = day.optString("id", "day-$dayIndex"),
                     label = day.optString("label"),
@@ -76,6 +115,10 @@ class LujianJsonParser : PlanParser {
                     summary = day.optNullableString("summary"),
                     budget = day.optNullableString("budget"),
                     backup = day.optNullableString("backup"),
+                    distanceEstimate = day.optNullableString("distanceEstimate"),
+                    durationEstimate = day.optNullableString("durationEstimate"),
+                    mapStops = mapStops,
+                    mapLegs = mapLegs,
                 )
             }
         }.orEmpty()

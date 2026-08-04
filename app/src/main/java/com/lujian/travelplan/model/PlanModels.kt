@@ -32,6 +32,27 @@ data class PlanDayDraft(
     val summary: String? = null,
     val budget: String? = null,
     val backup: String? = null,
+    val distanceEstimate: String? = null,
+    val durationEstimate: String? = null,
+    val mapStops: List<PlanMapStopDraft> = emptyList(),
+    val mapLegs: List<PlanMapLegDraft> = emptyList(),
+)
+
+data class PlanMapStopDraft(
+    val id: String,
+    val title: String,
+    val time: String? = null,
+    val category: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+)
+
+data class PlanMapLegDraft(
+    val id: String,
+    val fromId: String,
+    val toId: String,
+    val mode: String? = null,
+    val summary: String? = null,
 )
 
 data class PlanMapLinks(

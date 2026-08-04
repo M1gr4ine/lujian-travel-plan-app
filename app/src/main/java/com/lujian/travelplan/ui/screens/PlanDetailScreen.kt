@@ -210,11 +210,13 @@ internal fun NativePlanReader(plan: StoredPlan, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     var activePage by remember { mutableStateOf(PlanReaderPage.ITINERARY) }
     var focusedItemId by remember { mutableStateOf<String?>(null) }
+    var mapDragEnabled by remember { mutableStateOf(false) }
     var selectedDayIndex by rememberSaveable { mutableIntStateOf(0) }
     var lastPagerPage by remember { mutableIntStateOf(pagerState.currentPage) }
 
     LaunchedEffect(pagerState.currentPage) {
         if (pagerState.currentPage != lastPagerPage) focusedItemId = null
+        if (pagerState.currentPage != lastPagerPage) mapDragEnabled = false
         lastPagerPage = pagerState.currentPage
         selectedDayIndex = pagerState.currentPage
     }
@@ -224,6 +226,7 @@ internal fun NativePlanReader(plan: StoredPlan, modifier: Modifier = Modifier) {
     }
 
     LaunchedEffect(activePage) {
+        if (activePage != PlanReaderPage.MAP) mapDragEnabled = false
         if (activePage != PlanReaderPage.BUDGET && pagerState.currentPage != selectedDayIndex) {
             pagerState.scrollToPage(selectedDayIndex)
         }
@@ -240,7 +243,10 @@ internal fun NativePlanReader(plan: StoredPlan, modifier: Modifier = Modifier) {
         }
         PlanReaderTabs(activePage) { page ->
             activePage = page
-            if (page != PlanReaderPage.MAP) focusedItemId = null
+            if (page != PlanReaderPage.MAP) {
+                focusedItemId = null
+                mapDragEnabled = false
+            }
         }
         if (activePage != PlanReaderPage.BUDGET) {
             LazyRow(
@@ -284,11 +290,18 @@ internal fun NativePlanReader(plan: StoredPlan, modifier: Modifier = Modifier) {
                     },
                 )
             }
-            PlanReaderPage.MAP -> HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+            PlanReaderPage.MAP -> HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                userScrollEnabled = shouldEnableDayPaging(mapDragEnabled),
+            ) { page ->
                 DailyMapPage(
                     plan = plan.parsed,
                     day = days[page],
                     focusedItemId = focusedItemId,
+                    onDragEnabledChange = { enabled ->
+                        if (page == pagerState.currentPage) mapDragEnabled = enabled
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
             }

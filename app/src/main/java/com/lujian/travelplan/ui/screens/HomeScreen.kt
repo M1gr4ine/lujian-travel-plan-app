@@ -1,15 +1,6 @@
 package com.lujian.travelplan.ui.screens
 
 import android.content.Context
-import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
-import android.util.TypedValue
-import android.view.Gravity
-import android.view.ViewGroup
-import android.view.animation.DecelerateInterpolator
-import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,11 +19,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,8 +39,11 @@ import com.lujian.travelplan.map.MapViewportMode
 import com.lujian.travelplan.map.MapViewportPolicy
 import com.lujian.travelplan.map.MarkerClusterer
 import com.lujian.travelplan.map.LujianMapStyle
+import com.lujian.travelplan.ui.components.LujianMapControls
+import com.lujian.travelplan.ui.components.LujianMapInfoAction
 import com.lujian.travelplan.ui.components.PaperCard
 import com.lujian.travelplan.ui.components.LujianPinMark
+import com.lujian.travelplan.ui.components.createLujianMapInfoWindow
 import com.lujian.travelplan.ui.components.rememberLujianMapView
 import com.lujian.travelplan.ui.theme.Coral
 import com.lujian.travelplan.ui.theme.Ink
@@ -65,6 +61,7 @@ import org.maplibre.android.annotations.MarkerOptions
 fun HomeScreen(
     plans: List<StoredPlan>,
     onOpenPlan: (Long) -> Unit,
+    onDragEnabledChange: (Boolean) -> Unit = {},
 ) {
     var retryKey by remember { mutableIntStateOf(0) }
     val mappedPlans = remember(plans) {
@@ -109,6 +106,7 @@ fun HomeScreen(
                     plans = plans,
                     viewport = viewport,
                     onOpenPlan = onOpenPlan,
+                    onDragEnabledChange = onDragEnabledChange,
                     onRetry = { retryKey++ },
                 )
             }
@@ -122,17 +120,64 @@ private fun MapLibreSurface(
     plans: List<StoredPlan>,
     viewport: MapViewportMode,
     onOpenPlan: (Long) -> Unit,
+    onDragEnabledChange: (Boolean) -> Unit,
     onRetry: () -> Unit,
 ) {
     val context = LocalContext.current
     val mapView = rememberLujianMapView(key)
     var map by remember(key) { mutableStateOf<MapLibreMap?>(null) }
+    var dragEnabled by remember(key) { mutableStateOf(false) }
+    val currentOnDragEnabledChange by rememberUpdatedState(onDragEnabledChange)
     var ready by remember(key) { mutableStateOf(false) }
     var timedOut by remember(key) { mutableStateOf(false) }
 
     LaunchedEffect(key) {
         delay(8_000)
         if (!ready) timedOut = true
+    }
+
+    LaunchedEffect(key, dragEnabled) {
+        currentOnDragEnabledChange(dragEnabled)
+    }
+
+    LaunchedEffect(map, dragEnabled) {
+        val currentMap = map ?: return@LaunchedEffect
+        applyDailyMapDragMode(
+            dragEnabled = dragEnabled,
+            cancelTransitions = currentMap::cancelTransitions,
+            configureGestures = { scrollEnabled, flingEnabled ->
+                currentMap.uiSettings.apply {
+                    isScrollGesturesEnabled = scrollEnabled
+                    isFlingVelocityAnimationEnabled = flingEnabled
+                    isZoomGesturesEnabled = false
+                    isRotateGesturesEnabled = false
+                    isTiltGesturesEnabled = false
+                }
+            },
+        )
+    }
+
+    DisposableEffect(map) {
+        val currentMap = map
+        if (currentMap == null) {
+            onDispose { }
+        } else {
+            val listener = MapLibreMap.OnCameraMoveStartedListener { reason ->
+                if (shouldDismissMapInfoWindowOnCameraMove(
+                        reason,
+                        MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE,
+                    )
+                ) {
+                    dismissVisibleMapInfoWindows(
+                        currentMap.markers,
+                        { marker -> marker.isInfoWindowShown },
+                        { marker -> marker.hideInfoWindow() },
+                    )
+                }
+            }
+            currentMap.addOnCameraMoveStartedListener(listener)
+            onDispose { currentMap.removeOnCameraMoveStartedListener(listener) }
+        }
     }
 
     LaunchedEffect(map, plans, viewport) {
@@ -212,6 +257,19 @@ private fun MapLibreSurface(
         modifier = Modifier.fillMaxSize(),
     )
 
+    Box(
+        Modifier.fillMaxWidth().padding(12.dp),
+        contentAlignment = Alignment.TopEnd,
+    ) {
+        LujianMapControls(
+            dragEnabled = dragEnabled,
+            enabled = ready && map != null,
+            onZoomIn = { map?.easeCamera(CameraUpdateFactory.zoomIn(), 180) },
+            onZoomOut = { map?.easeCamera(CameraUpdateFactory.zoomOut(), 180) },
+            onToggleDrag = { dragEnabled = !dragEnabled },
+        )
+    }
+
     if (!ready) {
         Box(Modifier.fillMaxSize().background(Paper.copy(alpha = .9f)), contentAlignment = Alignment.Center) {
             PaperCard(modifier = Modifier.padding(32.dp)) {
@@ -233,73 +291,14 @@ private fun markerInfoWindow(
     context: Context,
     plans: List<StoredPlan>,
     onOpenPlan: (Long) -> Unit,
-): LinearLayout {
-    val density = context.resources.displayMetrics.density
-    fun dp(value: Int): Int = (value * density).toInt()
-
-    return LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL
-        gravity = Gravity.CENTER_HORIZONTAL
-        setPadding(dp(14), dp(10), dp(14), dp(10))
-        background = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = dp(14).toFloat()
-            setColor(Color.parseColor("#FAF6EF"))
-            setStroke(dp(3), Color.parseColor("#2A2520"))
-        }
-        elevation = dp(8).toFloat()
-        layoutParams = ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-        )
-
-        val title = TextView(context).apply {
-            text = if (plans.size == 1) plans.single().parsed.title else "这里有 ${plans.size} 份计划"
-            setTextColor(Color.parseColor("#2A2520"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            maxWidth = dp(230)
-        }
-        addView(title)
-
-        if (plans.size == 1) {
-            title.setOnClickListener { onOpenPlan(plans.single().id) }
-            addView(TextView(context).apply {
-                text = "再点大头针进入"
-                setTextColor(Color.parseColor("#6B6354"))
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-                gravity = Gravity.CENTER
-                setPadding(0, dp(4), 0, 0)
-            })
-        } else {
-            plans.forEach { plan ->
-                addView(TextView(context).apply {
-                    text = plan.parsed.title
-                    setTextColor(Color.parseColor("#FF6B4A"))
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                    typeface = Typeface.DEFAULT_BOLD
-                    gravity = Gravity.CENTER
-                    maxWidth = dp(230)
-                    setPadding(dp(4), dp(5), dp(4), dp(2))
-                    setOnClickListener { onOpenPlan(plan.id) }
-                })
-            }
-        }
-
-        alpha = 0f
-        scaleX = .92f
-        scaleY = .92f
-        post {
-            pivotX = width / 2f
-            pivotY = height.toFloat()
-            animate()
-                .alpha(1f)
-                .scaleX(1f)
-                .scaleY(1f)
-                .setDuration(170)
-                .setInterpolator(DecelerateInterpolator())
-                .start()
-        }
-    }
-}
+) = createLujianMapInfoWindow(
+    context = context,
+    title = if (plans.size == 1) plans.single().parsed.title else "这里有 ${plans.size} 份计划",
+    subtitle = "再点大头针进入".takeIf { plans.size == 1 },
+    onTitleClick = plans.singleOrNull()?.let { plan -> { onOpenPlan(plan.id) } },
+    actions = if (plans.size > 1) {
+        plans.map { plan -> LujianMapInfoAction(plan.parsed.title) { onOpenPlan(plan.id) } }
+    } else {
+        emptyList()
+    },
+)

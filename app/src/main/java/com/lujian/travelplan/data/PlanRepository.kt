@@ -16,7 +16,9 @@ import com.lujian.travelplan.model.ParsedPlan
 import com.lujian.travelplan.model.PlanCapability
 import com.lujian.travelplan.model.PlanDayDraft
 import com.lujian.travelplan.model.PlanItemDraft
+import com.lujian.travelplan.model.PlanMapLegDraft
 import com.lujian.travelplan.model.PlanMapLinks
+import com.lujian.travelplan.model.PlanMapStopDraft
 import com.lujian.travelplan.model.PlanPlaceDraft
 import com.lujian.travelplan.model.PlanSectionDraft
 import java.io.File
@@ -37,7 +39,7 @@ data class StoredPlan(
     val updatedAt: Long,
 )
 
-const val CURRENT_PLAN_DATA_REVISION = 4
+const val CURRENT_PLAN_DATA_REVISION = 5
 
 data class ImportedPlanFiles(
     val sourceFileName: String,
@@ -264,6 +266,7 @@ private fun PlanWithDetails.toStoredPlan(): StoredPlan {
             )
         },
         days = days.sortedBy { it.day.position }.map { relation ->
+            val dayExtras = extras.days[relation.day.sourceId]
             PlanDayDraft(
                 id = relation.day.sourceId,
                 label = relation.day.label,
@@ -282,9 +285,13 @@ private fun PlanWithDetails.toStoredPlan(): StoredPlan {
                         mapLinks = itemExtras?.mapLinks ?: PlanMapLinks(),
                     )
                 },
-                summary = extras.days[relation.day.sourceId]?.summary,
-                budget = extras.days[relation.day.sourceId]?.budget,
-                backup = extras.days[relation.day.sourceId]?.backup,
+                summary = dayExtras?.summary,
+                budget = dayExtras?.budget,
+                backup = dayExtras?.backup,
+                distanceEstimate = dayExtras?.distanceEstimate,
+                durationEstimate = dayExtras?.durationEstimate,
+                mapStops = dayExtras?.mapStops.orEmpty(),
+                mapLegs = dayExtras?.mapLegs.orEmpty(),
             )
         },
         sections = extras.sections,
@@ -338,6 +345,31 @@ private fun ParsedPlan.toExtrasJson(): String = JSONObject().apply {
                 put("summary", day.summary)
                 put("budget", day.budget)
                 put("backup", day.backup)
+                put("distanceEstimate", day.distanceEstimate)
+                put("durationEstimate", day.durationEstimate)
+                put("mapStops", JSONArray().apply {
+                    day.mapStops.forEach { stop ->
+                        put(JSONObject().apply {
+                            put("id", stop.id)
+                            put("title", stop.title)
+                            put("time", stop.time)
+                            put("category", stop.category)
+                            put("latitude", stop.latitude)
+                            put("longitude", stop.longitude)
+                        })
+                    }
+                })
+                put("mapLegs", JSONArray().apply {
+                    day.mapLegs.forEach { leg ->
+                        put(JSONObject().apply {
+                            put("id", leg.id)
+                            put("from", leg.fromId)
+                            put("to", leg.toId)
+                            put("mode", leg.mode)
+                            put("summary", leg.summary)
+                        })
+                    }
+                })
             })
         }
     })
@@ -364,7 +396,15 @@ private fun PlanMapLinks.toJson(): JSONObject = JSONObject().apply {
     put("baidu", baidu)
 }
 
-private data class DayExtras(val summary: String?, val budget: String?, val backup: String?)
+private data class DayExtras(
+    val summary: String?,
+    val budget: String?,
+    val backup: String?,
+    val distanceEstimate: String?,
+    val durationEstimate: String?,
+    val mapStops: List<PlanMapStopDraft>,
+    val mapLegs: List<PlanMapLegDraft>,
+)
 
 private data class ItemExtras(val placeId: String?, val transport: String?, val mapLinks: PlanMapLinks)
 
@@ -408,6 +448,35 @@ private fun String.toExtras(): PlanExtras = runCatching {
                 summary = day.optNullableString("summary"),
                 budget = day.optNullableString("budget"),
                 backup = day.optNullableString("backup"),
+                distanceEstimate = day.optNullableString("distanceEstimate"),
+                durationEstimate = day.optNullableString("durationEstimate"),
+                mapStops = day.optJSONArray("mapStops")?.let { stops ->
+                    List(stops.length()) { stopIndex -> stops.optJSONObject(stopIndex) }
+                        .filterNotNull()
+                        .map { stop ->
+                            PlanMapStopDraft(
+                                id = stop.optString("id"),
+                                title = stop.optString("title"),
+                                time = stop.optNullableString("time"),
+                                category = stop.optNullableString("category"),
+                                latitude = stop.optNullableDouble("latitude"),
+                                longitude = stop.optNullableDouble("longitude"),
+                            )
+                        }
+                }.orEmpty(),
+                mapLegs = day.optJSONArray("mapLegs")?.let { legs ->
+                    List(legs.length()) { legIndex -> legs.optJSONObject(legIndex) }
+                        .filterNotNull()
+                        .map { leg ->
+                            PlanMapLegDraft(
+                                id = leg.optString("id"),
+                                fromId = leg.optString("from"),
+                                toId = leg.optString("to"),
+                                mode = leg.optNullableString("mode"),
+                                summary = leg.optNullableString("summary"),
+                            )
+                        }
+                }.orEmpty(),
             )
         }
     }.orEmpty()

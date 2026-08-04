@@ -13,6 +13,7 @@ import com.lujian.travelplan.model.ParsedPlan
 import com.lujian.travelplan.model.PlanCapability
 import com.lujian.travelplan.model.PlanDayDraft
 import com.lujian.travelplan.model.PlanItemDraft
+import com.lujian.travelplan.model.PlanMapStopDraft
 import com.lujian.travelplan.model.PlanPlaceDraft
 import com.lujian.travelplan.ui.screens.PlanSelectionPolicy
 import com.lujian.travelplan.ui.screens.PlanReaderPresentation
@@ -41,6 +42,42 @@ class PolicyTest {
         assertEquals(1, RootTabSwipePolicy.adjacentIndex(currentIndex = 2, direction = -1, count = 3))
         assertEquals(null, RootTabSwipePolicy.adjacentIndex(currentIndex = 0, direction = -1, count = 3))
         assertEquals(null, RootTabSwipePolicy.adjacentIndex(currentIndex = 2, direction = 1, count = 3))
+    }
+
+    @Test
+    fun `子控件已消费横向手势时主页面不切换`() {
+        assertEquals(
+            null,
+            RootTabSwipePolicy.directionForGesture(
+                totalX = -100f,
+                totalY = 0f,
+                threshold = 56f,
+                childConsumed = true,
+            ),
+        )
+        assertEquals(
+            1,
+            RootTabSwipePolicy.directionForGesture(
+                totalX = -100f,
+                totalY = 0f,
+                threshold = 56f,
+                childConsumed = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `首页地图拖动关闭时允许已消费的横向手势切换页签`() {
+        assertEquals(
+            1,
+            RootTabSwipePolicy.directionForGesture(
+                totalX = -100f,
+                totalY = 0f,
+                threshold = 56f,
+                childConsumed = true,
+                allowConsumedGesture = true,
+            ),
+        )
     }
 
     @Test
@@ -144,9 +181,9 @@ class PolicyTest {
     }
 
     @Test
-    fun `原生计划阅读器提供行程每日地图与预算页签`() {
+    fun `原生计划阅读器提供行程地图与预算页签`() {
         assertEquals(
-            listOf("🗓️ 行程", "🗺️ 每日地图", "💰 预算"),
+            listOf("🗓️ 行程", "🗺️ 地图", "💰 预算"),
             PlanReaderPage.entries.map { it.label },
         )
     }
@@ -205,6 +242,32 @@ class PolicyTest {
         assertEquals(listOf("item-1", "item-2"), route.map { it.itemId })
         assertEquals(38.8817, route.first().latitude!!, 0.0001)
         assertEquals(null, route.last().latitude)
+    }
+
+    @Test
+    fun `地图点类别优先跟随匹配的行程地点`() {
+        val day = PlanDayDraft(
+            id = "day-1",
+            label = "第一天",
+            title = "老城美食",
+            items = listOf(
+                PlanItemDraft("item-1", "10:00", "东关街慢拍", "attraction", null, null),
+                PlanItemDraft("item-2", "12:00", "澳深鱼市午餐", "restaurant", null, null),
+            ),
+            mapStops = listOf(
+                PlanMapStopDraft("dongguan", "东关街", "10:00", "restaurant"),
+                PlanMapStopDraft("aoshen", "澳深鱼市", "12:00", "restaurant"),
+            ),
+        )
+        val plan = ParsedPlan(
+            title = "大连旅行计划",
+            capability = PlanCapability.ENHANCED,
+            days = listOf(day),
+        )
+
+        val route = buildDailyMapRoute(plan, day)
+
+        assertEquals(listOf("attraction", "restaurant"), route.map { it.category })
     }
 
     @Test

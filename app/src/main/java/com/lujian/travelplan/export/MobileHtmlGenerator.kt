@@ -55,6 +55,31 @@ object MobileHtmlGenerator {
                         put("summary", day.summary.orEmpty())
                         put("budget", day.budget.orEmpty())
                         put("backup", day.backup.orEmpty())
+                        put("distanceEstimate", day.distanceEstimate.orEmpty())
+                        put("durationEstimate", day.durationEstimate.orEmpty())
+                        put("mapStops", JSONArray().apply {
+                            day.mapStops.forEach { stop ->
+                                put(JSONObject().apply {
+                                    put("id", stop.id)
+                                    put("title", stop.title)
+                                    put("time", stop.time.orEmpty())
+                                    put("category", stop.category.orEmpty())
+                                    stop.latitude?.let { put("latitude", it) }
+                                    stop.longitude?.let { put("longitude", it) }
+                                })
+                            }
+                        })
+                        put("mapLegs", JSONArray().apply {
+                            day.mapLegs.forEach { leg ->
+                                put(JSONObject().apply {
+                                    put("id", leg.id)
+                                    put("from", leg.fromId)
+                                    put("to", leg.toId)
+                                    put("mode", leg.mode.orEmpty())
+                                    put("summary", leg.summary.orEmpty())
+                                })
+                            }
+                        })
                         put("items", JSONArray().apply {
                             day.items.forEach { item ->
                                 put(sourceItems[item.id].copyOrNew().apply {

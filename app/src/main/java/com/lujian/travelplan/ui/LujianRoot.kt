@@ -133,6 +133,7 @@ private fun LujianApp(
     var importMessage by remember { mutableStateOf<String?>(null) }
     var locationConfirmation by remember { mutableStateOf<Pair<Long, List<LocationCandidate>>?>(null) }
     var locationSelectionPrompt by remember { mutableStateOf<Pair<Long, String>?>(null) }
+    var homeMapDragEnabled by remember { mutableStateOf(false) }
     val sharedUri by incomingUri.collectAsState()
 
     LaunchedEffect(sharedUri) {
@@ -202,7 +203,7 @@ private fun LujianApp(
             startDestination = RootDestination.HOME.route,
             modifier = Modifier
                 .padding(padding)
-                .pointerInput(currentRoute) {
+                .pointerInput(currentRoute, homeMapDragEnabled) {
                     val currentIndex = RootDestination.entries.indexOfFirst { it.route == currentRoute }
                     if (currentIndex < 0) return@pointerInput
                     val threshold = 56.dp.toPx()
@@ -212,17 +213,22 @@ private fun LujianApp(
                         var totalY = 0f
                         var pressed = true
                         var switched = false
+                        var childConsumed = false
                         while (pressed && !switched) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val event = awaitPointerEvent(PointerEventPass.Final)
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
                             val delta = change.position - change.previousPosition
                             totalX += delta.x
                             totalY += delta.y
+                            childConsumed = childConsumed || change.isConsumed
                             pressed = change.pressed
-                            if (kotlin.math.abs(totalX) >= threshold &&
-                                kotlin.math.abs(totalX) > kotlin.math.abs(totalY) * 1.25f
-                            ) {
-                                val direction = if (totalX < 0f) 1 else -1
+                            RootTabSwipePolicy.directionForGesture(
+                                totalX = totalX,
+                                totalY = totalY,
+                                threshold = threshold,
+                                childConsumed = childConsumed,
+                                allowConsumedGesture = currentRoute == RootDestination.HOME.route && !homeMapDragEnabled,
+                            )?.let { direction ->
                                 RootTabSwipePolicy.adjacentIndex(
                                     currentIndex = currentIndex,
                                     direction = direction,
@@ -275,7 +281,11 @@ private fun LujianApp(
             },
         ) {
             composable(RootDestination.HOME.route) {
-                HomeScreen(plans, onOpenPlan = { navController.navigate("detail/$it") })
+                HomeScreen(
+                    plans = plans,
+                    onOpenPlan = { navController.navigate("detail/$it") },
+                    onDragEnabledChange = { homeMapDragEnabled = it },
+                )
             }
             composable(RootDestination.LIBRARY.route) {
                 PlanLibraryScreen(
