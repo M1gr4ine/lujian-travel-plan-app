@@ -294,7 +294,8 @@ private fun LujianApp(
                 val planId = entry.arguments?.getString("planId")?.toLongOrNull()
                 val plan = plans.firstOrNull { it.id == planId }
                 if (plan != null) {
-                    val useSharedBounds = PlanNoteTransitionPolicy.useSharedBounds(
+                    val useSharedBounds = rememberPlanNoteSharedBoundsEnabled(
+                        entryKey = entry,
                         fromRoute = navController.previousBackStackEntry?.destination?.route,
                         reduceMotion = reduceMotion,
                     )

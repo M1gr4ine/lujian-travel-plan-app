@@ -1,6 +1,6 @@
 package com.lujian.travelplan.ui.screens
 
-import android.graphics.BitmapFactory
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -42,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -211,8 +212,8 @@ private fun PlanPreviewCard(
     onClick: () -> Unit,
 ) {
     val context = LocalContext.current
-    val bitmap = remember(plan.thumbnailPath) {
-        plan.thumbnailPath?.let { BitmapFactory.decodeFile(File(context.filesDir, it).absolutePath) }
+    val bitmap by produceState<Bitmap?>(initialValue = null, key1 = plan.thumbnailPath) {
+        value = plan.thumbnailPath?.let { PlanThumbnailLoader.decode(File(context.filesDir, it)) }
     }
     val scale by animateFloatAsState(if (selected) .96f else 1f, label = "计划卡选择缩放")
     val destination = plan.parsed.destinations.joinToString(" · ") { it.name }.ifBlank { "未设置目的地" }
@@ -246,9 +247,10 @@ private fun PlanPreviewCard(
                 Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)).background(Paper),
                 contentAlignment = Alignment.Center,
             ) {
-                if (bitmap != null) {
+                val currentBitmap = bitmap
+                if (currentBitmap != null) {
                     Image(
-                        bitmap.asImageBitmap(),
+                        currentBitmap.asImageBitmap(),
                         contentDescription = "${plan.parsed.title}内容缩略图",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),

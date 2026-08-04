@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 
 data class PlanSharedTransitionScopes(
@@ -19,6 +20,16 @@ data class PlanSharedTransitionScopes(
 object PlanNoteTransitionPolicy {
     fun useSharedBounds(fromRoute: String?, reduceMotion: Boolean): Boolean =
         fromRoute == "library" && !reduceMotion
+}
+
+@Composable
+internal fun rememberPlanNoteSharedBoundsEnabled(
+    entryKey: Any,
+    fromRoute: String?,
+    reduceMotion: Boolean,
+): Boolean {
+    val openedFromLibrary = remember(entryKey) { fromRoute == "library" }
+    return openedFromLibrary && !reduceMotion
 }
 
 private val PlanSharedBoundsEasing = CubicBezierEasing(.22f, 1f, .36f, 1f)

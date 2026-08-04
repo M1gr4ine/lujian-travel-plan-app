@@ -1,5 +1,7 @@
 package com.lujian.travelplan.ui
 
+import androidx.compose.material3.Text
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -22,6 +24,23 @@ import org.junit.Test
 class LujianUiTest {
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun `详情返回阶段仍保留计划库进入时的共享动画`() {
+        val previousRoute = mutableStateOf<String?>("library")
+        composeRule.setContent {
+            val enabled = rememberPlanNoteSharedBoundsEnabled(
+                entryKey = "detail-7",
+                fromRoute = previousRoute.value,
+                reduceMotion = false,
+            )
+            Text(if (enabled) "共享动画开启" else "共享动画关闭")
+        }
+
+        composeRule.onNodeWithText("共享动画开启").assertIsDisplayed()
+        composeRule.runOnIdle { previousRoute.value = "home" }
+        composeRule.onNodeWithText("共享动画开启").assertIsDisplayed()
+    }
 
     @Test
     fun 空计划库显示同尺寸添加入口() {
