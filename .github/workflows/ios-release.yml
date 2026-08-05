@@ -1,17 +1,20 @@
-name: iOS 全流程测试与预发布
+name: iOS 全流程测试与正式发布
 
 on:
-  push:
-    branches:
-      - codex/ios-adaptation
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 正式发布标签
+        required: true
+        default: ios-v1.0.0
+        type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: ios-release-${{ github.ref }}
-  cancel-in-progress: true
+  group: ios-release-${{ inputs.release_tag }}
+  cancel-in-progress: false
 
 jobs:
   test-build-release:
@@ -40,13 +43,12 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      - name: 创建 iOS 预发布
+      - name: 创建 iOS 正式发布
         run: >-
-          gh release create "ios-v1.0.0-ci.${GITHUB_RUN_NUMBER}"
+          gh release create "${{ inputs.release_tag }}"
           ios/build/release/*
-          --prerelease
           --target "$GITHUB_SHA"
-          --title "旅笺 iOS 1.0.0 CI ${GITHUB_RUN_NUMBER}"
+          --title "旅笺 iOS 1.0.0"
           --notes-file docs/releases/ios-v1.0.0.md
         env:
           GH_TOKEN: ${{ github.token }}

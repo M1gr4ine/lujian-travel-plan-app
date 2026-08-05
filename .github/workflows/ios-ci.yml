@@ -3,6 +3,7 @@ name: iOS 持续集成
 on:
   push:
     branches:
+      - main
       - codex/ios-adaptation
   workflow_dispatch:
 

@@ -302,7 +302,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 ### iOS 1.0.0
 
-iOS 版使用 SwiftUI、MapKit、PhotosPicker 和隔离 WKWebView，最低支持 iOS 17。安装包位于 [iOS 1.0.0 CI 预发布](https://github.com/M1gr4ine/lujian-travel-plan-app/releases/tag/ios-v1.0.0-ci.4)：
+iOS 版使用 SwiftUI、MapKit、PhotosPicker 和隔离 WKWebView，最低支持 iOS 17。安装包位于 [iOS 1.0.0 正式发布](https://github.com/M1gr4ine/lujian-travel-plan-app/releases/tag/ios-v1.0.0)：
 
 - `Lujian-iOS-Unsigned-1.0.0.ipa`：iPhone 真机包，发布时未包含任何 Apple 证书或 Provisioning Profile。
 - `Lujian-iOS-Simulator-1.0.0.app.zip`：只能安装到 Xcode 的 iPhone 模拟器，不能安装到真机。
