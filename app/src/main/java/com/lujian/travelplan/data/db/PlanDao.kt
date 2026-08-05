@@ -47,8 +47,20 @@ interface PlanDao {
     @Query("SELECT * FROM plan_photos WHERE planId = :planId AND id = :photoId LIMIT 1")
     suspend fun findPhoto(planId: Long, photoId: Long): PlanPhotoEntity?
 
+    @Query("SELECT * FROM plan_photos WHERE id IN (:photoIds)")
+    suspend fun findPhotosByIds(photoIds: Set<Long>): List<PlanPhotoEntity>
+
+    @Query("SELECT * FROM plans WHERE id IN (:planIds)")
+    suspend fun findPlanEntitiesByIds(planIds: Set<Long>): List<PlanEntity>
+
     @Query("DELETE FROM plan_photos WHERE id = :photoId")
     suspend fun deletePhoto(photoId: Long)
+
+    @Query("DELETE FROM plan_photos WHERE id IN (:photoIds)")
+    suspend fun deletePhotos(photoIds: Set<Long>)
+
+    @Query("UPDATE plans SET customCoverPath = NULL, customCoverAddedAt = NULL WHERE id IN (:planIds)")
+    suspend fun clearCustomCovers(planIds: Set<Long>)
 
     @Insert
     suspend fun insertDay(day: PlanDayEntity): Long

@@ -61,6 +61,21 @@ data class PlanPhoto(
     val displayName: String?,
 )
 
+data class GalleryDeleteRequest(
+    val photoIds: Set<Long>,
+    val coverPlanIds: Set<Long>,
+)
+
+data class GalleryDeleteResult(
+    val deletedPhotos: Int,
+    val deletedCovers: Int,
+)
+
+private data class GalleryDeleteTargets(
+    val photos: List<PlanPhotoEntity>,
+    val covers: List<PlanEntity>,
+)
+
 const val CURRENT_PLAN_DATA_REVISION = 5
 
 data class ImportedPlanFiles(
@@ -164,6 +179,39 @@ class PlanRepository(
         dao.deletePhoto(photo.id)
         withContext(Dispatchers.IO) { mediaStore.deletePrivateFile(photo.relativePath) }
         Unit
+    }
+
+    suspend fun removeGalleryItems(request: GalleryDeleteRequest): Result<GalleryDeleteResult> = runCatching {
+        val targets = database.withTransaction {
+            val photos = request.photoIds
+                .takeIf { it.isNotEmpty() }
+                ?.let { dao.findPhotosByIds(it) }
+                .orEmpty()
+            val covers = request.coverPlanIds
+                .takeIf { it.isNotEmpty() }
+                ?.let { dao.findPlanEntitiesByIds(it) }
+                .orEmpty()
+                .filter { it.customCoverPath != null }
+            if (photos.isNotEmpty()) {
+                dao.deletePhotos(photos.mapTo(mutableSetOf()) { it.id })
+            }
+            if (covers.isNotEmpty()) {
+                dao.clearCustomCovers(covers.mapTo(mutableSetOf()) { it.id })
+            }
+            GalleryDeleteTargets(photos, covers)
+        }
+        val failedDeletes = withContext(Dispatchers.IO) {
+            buildList {
+                addAll(targets.photos.map { it.relativePath })
+                addAll(targets.covers.mapNotNull { it.customCoverPath })
+            }.distinct().count { path -> !mediaStore.deletePrivateFile(path) }
+        }
+        targets.covers.forEach { plan -> enqueueThumbnail(plan.id, plan.title) }
+        check(failedDeletes == 0) { "$failedDeletes 个私有文件未能删除" }
+        GalleryDeleteResult(
+            deletedPhotos = targets.photos.size,
+            deletedCovers = targets.covers.size,
+        )
     }
 
     suspend fun insertImported(
