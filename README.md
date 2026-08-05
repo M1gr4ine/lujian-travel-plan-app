@@ -9,7 +9,7 @@
 </div>
 
 > 旅行计划不该在聊天记录里失踪，也不该在出发当天变成一场“文件到底存哪了”的寻宝游戏。<br>
-> **旅笺**把微信或手机中的 HTML 行程收进一个原生 Android App：地图负责看世界，卡片负责收藏出发，日期轴负责陪你过好每一天。
+> **旅笺**把微信或手机中的 HTML 行程收进原生 Android / iOS App：地图负责看世界，卡片负责收藏出发，日期轴负责陪你过好每一天。
 
 旅笺以本地使用为主：无需注册账号，不把旅行计划上传到业务服务器。地图底图与未知地点解析需要网络，已经导入的计划可离线阅读。
 
@@ -263,6 +263,17 @@ LujianJsonParser → DalianTemplateParser → GenericHtmlParser
 
 ## 📦 版本与安装
 
+### iOS 1.0.0
+
+iOS 版使用 SwiftUI、MapKit、PhotosPicker 和隔离 WKWebView，最低支持 iOS 17。CI 发布两类产物：
+
+- `Lujian-iOS-Simulator-1.0.0.app.zip`：解压后用 `xcrun simctl install booted Lujian.app` 安装到 iPhone 模拟器。
+- `Lujian-iOS-Unsigned-1.0.0.ipa`：未签名包，需要 Apple 开发者证书重签，或使用 AltStore/Sideloadly 侧载；不能直接安装到普通 iPhone。
+
+没有实机的情况下，发布流水线会执行全部 Swift 单元测试、两条 iPhone 模拟器 UI 流程，并实际安装、启动模拟器 App。详细边界见 [iOS 1.0.0 发布说明](docs/releases/ios-v1.0.0.md)。
+
+### Android 1.2.0
+
 | 项目 | 当前配置 |
 | --- | --- |
 | 应用名称 | 旅笺 |
@@ -291,15 +302,15 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 | 领域 | 方案 |
 | --- | --- |
-| 语言与 UI | Kotlin + Jetpack Compose |
-| 页面导航 | Navigation Compose + 根页面手势切换 |
-| 本地数据 | Room |
+| 语言与 UI | Android：Kotlin + Jetpack Compose；iOS：Swift 6 + SwiftUI |
+| 页面导航 | Android：Navigation Compose；iOS：SwiftUI NavigationStack |
+| 本地数据 | Android：Room；iOS：Codable 原子快照 |
 | 后台任务 | WorkManager |
-| 地图 | MapLibre Native 13.3.0 + OpenFreeMap Positron |
-| HTML 解析 | Jsoup + `org.json` |
-| HTML 阅读 | WebViewAssetLoader + 隔离 WebView |
-| 最低版本 | Android 8 / API 26 |
-| 目标版本 | Android API 37 |
+| 地图 | Android：MapLibre Native；iOS：MapKit |
+| HTML 解析 | Android：Jsoup + `org.json`；iOS：Foundation + Codable |
+| HTML 阅读 | Android：WebViewAssetLoader；iOS：隔离 WKWebView |
+| 最低版本 | Android 8 / API 26；iOS 17 |
+| 目标版本 | Android API 37；iOS 17+ |
 
 ## 🗂️ 工程结构
 
