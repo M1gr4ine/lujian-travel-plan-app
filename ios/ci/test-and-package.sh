@@ -22,13 +22,27 @@ udid="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=
 xcrun simctl boot "$udid" 2>/dev/null || true
 xcrun simctl bootstatus "$udid" -b
 
+test_log="$build_root/xcodebuild-test.log"
+set +e
 xcodebuild test \
   -project Lujian.xcodeproj \
   -scheme Lujian \
   -destination "platform=iOS Simulator,id=$udid" \
   -resultBundlePath "$build_root/LujianTests.xcresult" \
   -parallel-testing-enabled NO \
-  -maximum-concurrent-test-simulator-destinations 1
+  -maximum-concurrent-test-simulator-destinations 1 \
+  -test-timeouts-enabled YES \
+  -default-test-execution-time-allowance 90 \
+  -maximum-test-execution-time-allowance 180 \
+  2>&1 | tee "$test_log"
+test_status="${PIPESTATUS[0]}"
+set -e
+if [[ "$test_status" -ne 0 ]]; then
+  failure_summary="$(grep -E "error:|failed|XCTAssert|Assertion Failure|Test Case.*failed" "$test_log" | tail -n 60 | tr '\n' ' ' | cut -c1-7000)"
+  failure_summary="${failure_summary//'%'/'%25'}"
+  echo "::error title=iOS 全流程失败::${failure_summary:-xcodebuild 未提供失败摘要，请查看 xcodebuild-test.log 工件}"
+  exit "$test_status"
+fi
 
 xcodebuild build \
   -project Lujian.xcodeproj \

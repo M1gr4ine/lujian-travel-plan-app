@@ -152,7 +152,7 @@ final class PlanStore: ObservableObject {
     func saveCover(data: Data, planID: UUID) throws -> String {
         guard var plan = plan(id: planID) else { throw PlanStoreError.planNotFound }
         let fileExtension = try imageFileExtension(data)
-        let relativePath = "plans/\(planID.uuidString)/cover.\(fileExtension)"
+        let relativePath = "plans/\(planID.uuidString)/cover-\(UUID().uuidString).\(fileExtension)"
         let oldPath = plan.coverRelativePath
         let url = try writePrivateFile(data, relativePath: relativePath)
         plan.coverRelativePath = relativePath
@@ -192,7 +192,7 @@ final class PlanStore: ObservableObject {
 
     @discardableResult
     func writeOriginalHTML(_ data: Data, planID: UUID) throws -> String {
-        let relativePath = "plans/\(planID.uuidString)/original.html"
+        let relativePath = "plans/\(planID.uuidString)/original-\(UUID().uuidString).html"
         _ = try writePrivateFile(data, relativePath: relativePath)
         return relativePath
     }

@@ -47,9 +47,27 @@ final class HTMLImportTests: XCTestCase {
         XCTAssertEqual(try PlanHTMLParser.parse(decoded).plan.title, "青岛慢游")
     }
 
+    func testOrdinaryHTMLReadsExplicitGeographyMetadata() throws {
+        let html = """
+        <html><head><title>杭州周末</title>
+        <meta name="travel:destination" content="杭州">
+        <meta name="lujian:country-code" content="CN">
+        <meta name="lujian:latitude" content="30.2741">
+        <meta name="lujian:longitude" content="120.1551">
+        </head><body>周末计划</body></html>
+        """
+        let decoded = try HTMLDecoder.decode(data: Data(html.utf8), fileName: "hangzhou.html")
+        let destination = try XCTUnwrap(PlanHTMLParser.parse(decoded).plan.destinations.first)
+        XCTAssertEqual(destination.name, "杭州")
+        XCTAssertEqual(destination.countryCode, "CN")
+        XCTAssertEqual(destination.latitude, 30.2741)
+        XCTAssertEqual(destination.longitude, 120.1551)
+    }
+
     @MainActor
     func testSameHashUpdatesWithoutLosingArchiveState() throws {
-        let store = PlanStore.temporary(root: try TestFixtures.temporaryRoot())
+        let root = try TestFixtures.temporaryRoot()
+        let store = PlanStore.temporary(root: root)
         let service = PlanImportService(store: store)
         let data = Data(TestFixtures.html(title: "A").utf8)
         let first = try service.importData(data, fileName: "a.html")
@@ -60,5 +78,9 @@ final class HTMLImportTests: XCTestCase {
         XCTAssertEqual(first.planID, second.planID)
         XCTAssertTrue(try XCTUnwrap(store.plan(id: second.planID)).isArchived)
         XCTAssertTrue(second.replacedExisting)
+        let planRoot = root.appendingPathComponent("plans/\(second.planID.uuidString)")
+        let htmlFiles = try FileManager.default.contentsOfDirectory(at: planRoot, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "html" }
+        XCTAssertEqual(htmlFiles.count, 1)
     }
 }

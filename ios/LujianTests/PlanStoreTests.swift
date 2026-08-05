@@ -46,4 +46,23 @@ final class PlanStoreTests: XCTestCase {
             )
         )
     }
+
+    func testReplacingCoverCommitsNewFileBeforeRemovingOldPrivateCopy() throws {
+        let store = PlanStore.temporary(root: try TestFixtures.temporaryRoot())
+        let plan = TestFixtures.plan()
+        try store.upsert(plan)
+
+        let first = try store.saveCover(
+            data: Data([0xFF, 0xD8, 0xFF, 0x00]),
+            planID: plan.id
+        )
+        let second = try store.saveCover(
+            data: Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+            planID: plan.id
+        )
+
+        XCTAssertNotEqual(first, second)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: try store.privateFileURL(relativePath: first).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try store.privateFileURL(relativePath: second).path))
+    }
 }

@@ -151,11 +151,22 @@ enum PlanHTMLParser {
         let displayTitle = title?.isEmpty == false ? title! : (fileName as NSString).deletingPathExtension
         guard !displayTitle.trimmed.isEmpty else { throw HTMLImportError.invalidHTML }
 
-        let destinationName = metaContent(names: ["lujian:destination", "geo.placename"], in: html)
+        let destinationName = metaContent(
+            names: ["lujian:destination", "travel:destination", "geo.placename"],
+            in: html
+        )
+        let countryCode = metaContent(names: ["lujian:country-code"], in: html)
         let coordinateText = metaContent(names: ["geo.position", "icbm"], in: html)
-        let coordinates = coordinateText.flatMap(parseCoordinates)
+        let coordinates = coordinateText.flatMap(parseCoordinates) ?? explicitCoordinates(in: html)
         let destinations = destinationName.map {
-            [PlanDestination(name: $0, latitude: coordinates?.0, longitude: coordinates?.1)]
+            [
+                PlanDestination(
+                    name: $0,
+                    countryCode: countryCode,
+                    latitude: coordinates?.0,
+                    longitude: coordinates?.1
+                )
+            ]
         } ?? []
 
         return ParsedImport(
@@ -209,6 +220,16 @@ enum PlanHTMLParser {
         guard parts.count >= 2,
               let latitude = Double(parts[0].trimmed),
               let longitude = Double(parts[1].trimmed),
+              validLatitude(latitude) != nil,
+              validLongitude(longitude) != nil else { return nil }
+        return (latitude, longitude)
+    }
+
+    private static func explicitCoordinates(in html: String) -> (Double, Double)? {
+        guard let latitudeText = metaContent(names: ["lujian:latitude"], in: html),
+              let longitudeText = metaContent(names: ["lujian:longitude"], in: html),
+              let latitude = Double(latitudeText),
+              let longitude = Double(longitudeText),
               validLatitude(latitude) != nil,
               validLongitude(longitude) != nil else { return nil }
         return (latitude, longitude)

@@ -260,6 +260,7 @@ struct PlanDetailView: View {
 }
 
 private struct DailyRouteMap: View {
+    @Environment(\.openURL) private var openURL
     let day: PlanDay
     let places: [PlanPlace]
     @State private var position: MapCameraPosition = .automatic
@@ -302,7 +303,55 @@ private struct DailyRouteMap: View {
             }
             .font(.subheadline)
             .padding(.horizontal)
+
+            if !stops.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(stops) { stop in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(stop.title).font(.headline).lineLimit(1)
+                                HStack(spacing: 8) {
+                                    Button("Apple 地图") { openAppleMaps(stop) }
+                                    if let amap = matchingPlace(stop)?.mapLinks.amap.flatMap(secureHTTPSURL) {
+                                        Button("高德") { openURL(amap) }
+                                    }
+                                    if let baidu = matchingPlace(stop)?.mapLinks.baidu.flatMap(secureHTTPSURL) {
+                                        Button("百度") { openURL(baidu) }
+                                    }
+                                }
+                                .font(.caption.bold())
+                                .buttonStyle(.bordered)
+                            }
+                            .padding(12)
+                            .background(LujianPalette.paper, in: RoundedRectangle(cornerRadius: 14))
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            }
         }
+    }
+
+    private func matchingPlace(_ stop: PlanMapStop) -> PlanPlace? {
+        places.first { $0.id == stop.id || $0.name == stop.title }
+    }
+
+    private func secureHTTPSURL(_ value: String) -> URL? {
+        guard let url = URL(string: value), url.scheme?.lowercased() == "https" else { return nil }
+        return url
+    }
+
+    private func openAppleMaps(_ stop: PlanMapStop) {
+        guard let latitude = stop.latitude, let longitude = stop.longitude else { return }
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "maps.apple.com"
+        components.path = "/"
+        components.queryItems = [
+            URLQueryItem(name: "ll", value: "\(latitude),\(longitude)"),
+            URLQueryItem(name: "q", value: stop.title)
+        ]
+        if let url = components.url { openURL(url) }
     }
 }
 

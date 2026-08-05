@@ -31,6 +31,7 @@ final class PlanImportService {
         var plan = try PlanHTMLParser.parse(decoded).plan
         let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         let existing = store.plans.first { $0.sourceHash == hash }
+        let previousOriginalPath = existing?.originalHTMLRelativePath
 
         if let existing {
             plan.id = existing.id
@@ -42,8 +43,17 @@ final class PlanImportService {
         }
         plan.sourceName = fileName
         plan.sourceHash = hash
-        plan.originalHTMLRelativePath = try store.writeOriginalHTML(data, planID: plan.id)
-        try store.upsert(plan)
+        let newOriginalPath = try store.writeOriginalHTML(data, planID: plan.id)
+        plan.originalHTMLRelativePath = newOriginalPath
+        do {
+            try store.upsert(plan)
+        } catch {
+            try? store.deletePrivateFile(relativePath: newOriginalPath)
+            throw error
+        }
+        if let previousOriginalPath, previousOriginalPath != newOriginalPath {
+            try? store.deletePrivateFile(relativePath: previousOriginalPath)
+        }
         return ImportOutcome(planID: plan.id, replacedExisting: existing != nil)
     }
 

@@ -36,6 +36,7 @@ jobs:
           path: |
             ios/build/release/*
             ios/build/LujianTests.xcresult
+            ios/build/xcodebuild-test.log
           if-no-files-found: warn
           retention-days: 14
 
