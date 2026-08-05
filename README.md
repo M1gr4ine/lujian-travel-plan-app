@@ -4,7 +4,7 @@
 
 ### 把一份 HTML 行程，变成手机里随手翻阅的旅行手账
 
-**导入文件 · 自动认地点 · 地图落针 · 按天阅读 · 随手编辑 · 本地保存**
+**导入文件 · 自动认地点 · 路线地图 · 按天阅读 · 私有相册 · 归档足迹**
 
 </div>
 
@@ -17,39 +17,62 @@
 
 <table>
   <tr>
-    <td align="center" width="25%">
-      <img src="docs/screenshots/map-callout.png" width="230" alt="首页地图与大头针信息框"><br>
-      <b>📍 地图记住目的地</b><br>
-      <sub>点一下看计划，再点一下就出发</sub>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/home.png" width="250" alt="旅笺首页目的地地图与四栏导航"><br>
+      <b>📍 目的地都在地图上</b><br>
+      <sub>大头针聚合计划，地图支持缩放与拖动锁定</sub>
     </td>
-    <td align="center" width="25%">
-      <img src="docs/screenshots/library.png" width="230" alt="计划库卡片"><br>
-      <b>🗃️ 每次旅行一张卡</b><br>
-      <sub>封面、标题、地点、日期一眼看清</sub>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/board.png" width="250" alt="旅笺计划板与折角计划卡"><br>
+      <b>🗃️ 待出发与走过的旅程</b><br>
+      <sub>计划板归档到足迹板，也能随时恢复</sub>
     </td>
-    <td align="center" width="25%">
-      <img src="docs/screenshots/reader.png" width="230" alt="单轴日期计划阅读器"><br>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/itinerary.png" width="250" alt="按日期阅读的原生旅行计划"><br>
       <b>🗓️ 一天一天读</b><br>
-      <sub>顶部日期轴切换，不在长网页里迷路</sub>
+      <sub>日期点选与左右滑动同步，行程卡可展开</sub>
     </td>
-    <td align="center" width="25%">
-      <img src="docs/screenshots/editor.png" width="230" alt="旅行计划编辑页"><br>
-      <b>✍️ 行程随手改</b><br>
-      <sub>时间、费用、备注和顺序都能调整</sub>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/daily-map.png" width="250" alt="带路线、地点和预计里程的每日地图"><br>
+      <b>🗺️ 当天路线直接展开</b><br>
+      <sub>地点、顺序、预计里程和移动时间一起看</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/gallery-manage.png" width="250" alt="计划相册批量选择与删除"><br>
+      <b>📷 每个地点都有相册</b><br>
+      <sub>按时间或大头针浏览，支持跨分类批量管理</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/global-gallery.png" width="250" alt="汇总所有计划照片的全局相册"><br>
+      <b>🌄 所有出发汇成一本相册</b><br>
+      <sub>按加入时间混排，或按旅行计划回看</sub>
     </td>
   </tr>
 </table>
 
-> 截图来自 Huawei PLA-AL10 真机；`1.1.0` 已在同一设备完成三页签阅读器实机回归。
+> 截图由 Android 37 模拟器（1080 × 2400）运行 `1.2.0` 生成，使用仓库数据契约构造的演示行程；地图底图需要联网加载。
+
+## 🆕 1.2.0 新增
+
+- **旅笺板**：原计划库升级为计划板/足迹板，支持多选、全选、批量归档、恢复和删除。
+- **每日路线地图**：把当天地点按顺序落针连线，展示预计里程与移动时间；地图可缩放、锁定/解锁拖动，并从地点卡跳转高德或百度地图。
+- **手动定位兜底**：地点解析不到时，可直接在地图上点选坐标，不阻塞 HTML 导入和离线阅读。
+- **计划相册**：从行程卡或地图地点卡添加照片，按加入时间或大头针浏览。
+- **全局相册**：跨计划汇总照片，可按加入时间混排或按计划分组。
+- **批量相册管理**：计划相册和全局相册都支持跨分类多选、全选和批量删除；删除自定义预览图后自动恢复默认封面。
+- **自定义预览图**：编辑计划时可选择、更换或恢复默认预览图，照片始终复制到 App 私有目录。
 
 ## ✨ 核心能力
 
 | 能力 | 旅笺怎么做 | 你得到什么 |
 | --- | --- | --- |
 | 📥 HTML 导入 | 系统文件选择器、微信“用其他应用打开/分享” | 不用复制粘贴，原文件直接收进旅笺板 |
-| 🧭 地点识别 | 读取旅笺坐标标签、常见地理标签、城市文本与 Geocoder 候选 | 导入后自动在地图落针；不确定时由你确认 |
+| 🧭 地点识别 | 读取旅笺坐标标签、常见地理标签、城市文本与 Geocoder 候选，失败时支持地图点选 | 导入后自动落针；机器找不到也能由你手动校正 |
 | 🗺️ 纸张地图 | MapLibre + 低饱和纸张主题 | 中国计划看中国，出现境外目的地自动看全球 |
 | 📌 计划大头针 | 复古红色球头、短墨色直针、针上方信息框 | 第一次点开名称，第二次进入计划 |
+| 🛣️ 每日路线 | 当天地点顺序落针连线、里程/耗时摘要、地点卡与外部地图入口 | 先看清怎么走，再决定在哪停留 |
 | 🗃️ 旅笺板 | 流畅切换计划板/足迹板，支持批量归档、恢复与删除 | 待出发和走过的旅程各归其位 |
 | 🗓️ 原生计划阅读 | 行程、每日地图、预算、相册四页签，日期点选与左右滑动同步 | 卡片可展开、跳转地图，并按地点收藏照片 |
 | ✍️ 结构化编辑 | 编辑计划内容并自选预览图 | 临时改时间、费用、备注或封面，不必重做整份 HTML |
@@ -79,7 +102,7 @@
 
 1. 在首页点大头针，或在旅笺板点计划卡进入详情；便签会从原位置平滑展开，返回时反向收回。
 2. 在“🗓️ 行程 / 🗺️ 地图 / 💰 预算 / 📷 相册”之间切换；日期栏会在行程与地图之间保持同步。
-3. 展开行程卡，或使用地图下方的地点卡，可为对应大头针添加照片并跳到该地点相册。
+3. 展开行程卡，或使用地图下方的地点卡，可查看下一段交通、跳转高德/百度地图，为对应大头针添加照片并进入地点相册。
 4. 计划内相册可按加入时间或大头针浏览；底部全局相册可按加入时间或计划浏览。
 5. 在任一相册点击 **管理**，可跨分类多选或全选地点照片与自定义预览图；删除只影响旅笺私有副本。
 6. 点击右上角铅笔进入编辑模式；除行程内容外，还可选择、更换或恢复默认预览图。
@@ -244,7 +267,7 @@ LujianJsonParser → DalianTemplateParser → GenericHtmlParser
 | --- | --- |
 | 应用名称 | 旅笺 |
 | Application ID | `com.lujian.travelplan` |
-| 当前版本 | `1.1.0`（versionCode 3） |
+| 当前版本 | `1.2.0`（versionCode 4） |
 | 最低系统 | Android 8 / API 26 |
 | 编译与目标 SDK | API 37 |
 | CPU 架构 | 由 debug 构建依赖自动打包 |
@@ -262,7 +285,7 @@ app/build/outputs/apk/debug/app-debug.apk
 adb install -r app\build\outputs\apk\debug\app-debug.apk
 ```
 
-已验证安装包见 [GitHub Releases](https://github.com/M1gr4ine/travelplan-app/releases/latest)。
+已验证安装包见 [GitHub Releases](https://github.com/M1gr4ine/lujian-travel-plan-app/releases/latest)。
 
 ## 🛠️ 技术栈
 
@@ -298,7 +321,7 @@ app/src/main/java/com/lujian/travelplan/
 - `CompositePlanParser`：按增强格式、大连模板、普通 HTML 的优先级选择解析器。
 - `PlanRepository`：持久化计划图、事务编辑、定位确认、批量删除与导出文件选择。
 - `PlanReindexService`：启动时为旧计划补充地点并升级缩略图。
-- `LujianRoot`：三栏导航、根页面滑动、导入反馈与地点确认。
+- `LujianRoot`：首页/旅笺板/相册/我的四栏导航、根页面滑动、导入反馈与地点确认。
 
 ## 🧑‍💻 本地开发
 
@@ -345,7 +368,7 @@ export JAVA_HOME=/path/to/jdk-17
 .\gradlew.bat connectedDebugAndroidTest
 ```
 
-测试覆盖编码识别、伪 HTML 与大小限制、SHA-256 去重、增强格式契约、解析器优先级、导出再导入、地图视野、地点聚合、标题封面、批量选择、WebView 安全策略和单轴日期滑动。
+测试覆盖编码识别、伪 HTML 与大小限制、SHA-256 去重、增强格式契约、解析器优先级、导出再导入、地图视野、地点聚合、每日路线、标题封面、计划归档、相册分组与批量删除、WebView 安全策略和单轴日期滑动。
 
 ## 🧱 当前边界
 
