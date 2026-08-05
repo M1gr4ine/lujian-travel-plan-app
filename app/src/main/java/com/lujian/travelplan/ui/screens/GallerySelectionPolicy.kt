@@ -1,5 +1,7 @@
 package com.lujian.travelplan.ui.screens
 
+import com.lujian.travelplan.data.GalleryDeleteRequest
+
 sealed interface GallerySelectionKey {
     val planId: Long
 
@@ -41,4 +43,14 @@ object GallerySelectionPolicy {
         photos = selected.count { it is GallerySelectionKey.Photo },
         covers = selected.count { it is GallerySelectionKey.Cover },
     )
+}
+
+internal fun Set<GallerySelectionKey>.toDeleteRequest(): GalleryDeleteRequest = GalleryDeleteRequest(
+    photoIds = filterIsInstance<GallerySelectionKey.Photo>().mapTo(mutableSetOf()) { it.photoId },
+    coverPlanIds = filterIsInstance<GallerySelectionKey.Cover>().mapTo(mutableSetOf()) { it.planId },
+)
+
+internal fun PlanGalleryItem.selectionKey(planId: Long): GallerySelectionKey = when (this) {
+    is PlanGalleryItem.Cover -> GallerySelectionKey.Cover(planId)
+    is PlanGalleryItem.Photo -> GallerySelectionKey.Photo(planId, value.id)
 }

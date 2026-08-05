@@ -311,6 +311,7 @@ private fun LujianApp(
                 GlobalGalleryScreen(
                     plans = plans,
                     onOpenPlan = { planId -> navController.navigate("detail/$planId") },
+                    onDeleteItems = graph.repository::removeGalleryItems,
                 )
             }
             composable(RootDestination.PROFILE.route) { ProfileScreen(plans) }

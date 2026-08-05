@@ -70,6 +70,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lujian.travelplan.data.PlanRepository
 import com.lujian.travelplan.data.PlanPhoto
+import com.lujian.travelplan.data.GalleryDeleteRequest
+import com.lujian.travelplan.data.GalleryDeleteResult
 import com.lujian.travelplan.data.StoredPlan
 import com.lujian.travelplan.export.MobileHtmlGenerator
 import com.lujian.travelplan.model.PlanCapability
@@ -199,6 +201,7 @@ fun PlanDetailScreen(
                         photoError = repository.removePhoto(plan.id, photo.id).exceptionOrNull()?.message
                     }
                 },
+                onDeleteItems = repository::removeGalleryItems,
             )
         } else {
             Column(Modifier.padding(padding).fillMaxSize()) {
@@ -243,6 +246,9 @@ internal fun NativePlanReader(
     modifier: Modifier = Modifier,
     onAddPhotos: (PhotoPin) -> Unit = {},
     onRemovePhoto: (PlanPhoto) -> Unit = {},
+    onDeleteItems: suspend (GalleryDeleteRequest) -> Result<GalleryDeleteResult> = {
+        Result.success(GalleryDeleteResult(0, 0))
+    },
 ) {
     val days = plan.parsed.days
     val pagerState = rememberPagerState(pageCount = { days.size })
@@ -366,6 +372,7 @@ internal fun NativePlanReader(
                 initialPinId = galleryPinId,
                 onAddPhotos = onAddPhotos,
                 onRemovePhoto = onRemovePhoto,
+                onDeleteItems = onDeleteItems,
                 modifier = Modifier.fillMaxSize(),
             )
         }

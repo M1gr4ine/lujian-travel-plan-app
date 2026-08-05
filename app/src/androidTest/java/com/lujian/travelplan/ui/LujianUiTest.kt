@@ -15,6 +15,8 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import com.lujian.travelplan.data.StoredPlan
 import com.lujian.travelplan.data.PlanPhoto
+import com.lujian.travelplan.data.GalleryDeleteRequest
+import com.lujian.travelplan.data.GalleryDeleteResult
 import com.lujian.travelplan.model.ParsedPlan
 import com.lujian.travelplan.model.PlanCapability
 import com.lujian.travelplan.model.PlanDayDraft
@@ -25,6 +27,8 @@ import com.lujian.travelplan.ui.components.LujianMapControls
 import com.lujian.travelplan.ui.components.createLujianMapInfoWindow
 import com.lujian.travelplan.ui.screens.NativePlanReader
 import com.lujian.travelplan.ui.screens.CoverEditorCard
+import com.lujian.travelplan.ui.screens.GlobalGalleryScreen
+import com.lujian.travelplan.ui.screens.PlanGalleryScreen
 import com.lujian.travelplan.ui.screens.PlanLibraryScreen
 import com.lujian.travelplan.ui.theme.LujianTheme
 import androidx.test.platform.app.InstrumentationRegistry
@@ -240,6 +244,107 @@ class LujianUiTest {
         composeRule.onNodeWithText("按加入时间").assertIsDisplayed()
         composeRule.onNodeWithText("按大头针").performClick()
         composeRule.onNodeWithText("星海广场").assertIsDisplayed()
+    }
+
+    @Test
+    fun 计划相册批量管理跨分类保留照片和封面选择() {
+        val plan = StoredPlan(
+            id = 9,
+            parsed = ParsedPlan(
+                title = "计划相册批量测试",
+                capability = PlanCapability.ENHANCED,
+                days = listOf(
+                    PlanDayDraft(
+                        "d1",
+                        "第一天",
+                        "海边",
+                        listOf(PlanItemDraft("pin-a", "09:00", "星海广场", null, null, null)),
+                    ),
+                ),
+            ),
+            sourceFileName = "album.html",
+            rawPath = "plans/9/raw.html",
+            generatedPath = null,
+            thumbnailPath = null,
+            compatibilityMode = false,
+            updatedAt = 1,
+            customCoverPath = "plans/9/cover/custom.jpg",
+            customCoverAddedAt = 20,
+            photos = listOf(PlanPhoto(11, "pin-a", "星海广场", "plans/9/photos/a.jpg", 10, null)),
+        )
+        var deleteRequest: GalleryDeleteRequest? = null
+        composeRule.setContent {
+            LujianTheme {
+                PlanGalleryScreen(
+                    plan = plan,
+                    onDeleteItems = { request ->
+                        deleteRequest = request
+                        Result.success(GalleryDeleteResult(1, 1))
+                    },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("管理").performClick()
+        composeRule.onNodeWithContentDescription("计划封面").performClick()
+        composeRule.onNodeWithContentDescription("地点照片").performClick()
+        composeRule.onNodeWithText("已选 2 项").assertIsDisplayed()
+        composeRule.onNodeWithText("按大头针").performClick()
+        composeRule.onNodeWithText("已选 2 项").assertIsDisplayed()
+        composeRule.onNodeWithText("删除").performClick()
+        composeRule.onNodeWithText("删除 1 张照片和 1 张自定义预览图？").assertIsDisplayed()
+        composeRule.onNodeWithText("确认删除").performClick()
+        composeRule.waitForIdle()
+
+        composeRule.runOnIdle {
+            assertEquals(setOf(11L), deleteRequest?.photoIds)
+            assertEquals(setOf(9L), deleteRequest?.coverPlanIds)
+        }
+    }
+
+    @Test
+    fun 全局相册批量管理跨计划全选并跨分类保留() {
+        fun galleryPlan(id: Long, title: String) = StoredPlan(
+            id = id,
+            parsed = ParsedPlan(title = title, capability = PlanCapability.ENHANCED),
+            sourceFileName = "$id.html",
+            rawPath = "plans/$id/raw.html",
+            generatedPath = null,
+            thumbnailPath = null,
+            compatibilityMode = false,
+            updatedAt = id,
+            customCoverPath = "plans/$id/cover/custom.jpg",
+            customCoverAddedAt = id + 20,
+            photos = listOf(PlanPhoto(id + 100, "pin-$id", "地点$id", "plans/$id/photos/a.jpg", id + 10, null)),
+        )
+        var deleteRequest: GalleryDeleteRequest? = null
+        composeRule.setContent {
+            LujianTheme {
+                GlobalGalleryScreen(
+                    plans = listOf(galleryPlan(1, "大连"), galleryPlan(2, "青岛")),
+                    onOpenPlan = {},
+                    onDeleteItems = { request ->
+                        deleteRequest = request
+                        Result.success(GalleryDeleteResult(2, 2))
+                    },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("管理").performClick()
+        composeRule.onNodeWithText("全选").performClick()
+        composeRule.onNodeWithText("已选 4 项").assertIsDisplayed()
+        composeRule.onNodeWithText("按计划").performClick()
+        composeRule.onNodeWithText("已选 4 项").assertIsDisplayed()
+        composeRule.onNodeWithText("删除").performClick()
+        composeRule.onNodeWithText("删除 2 张照片和 2 张自定义预览图？").assertIsDisplayed()
+        composeRule.onNodeWithText("确认删除").performClick()
+        composeRule.waitForIdle()
+
+        composeRule.runOnIdle {
+            assertEquals(setOf(101L, 102L), deleteRequest?.photoIds)
+            assertEquals(setOf(1L, 2L), deleteRequest?.coverPlanIds)
+        }
     }
 
     @Test
