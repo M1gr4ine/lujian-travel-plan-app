@@ -54,13 +54,14 @@ class PlanMediaStore<T>(
         copyImage(reference, File(filesRoot, "plans/$planId/photos/${pinKey(pinId)}"))
 
     fun resolvePrivateFile(relativePath: String): File? {
-        val candidate = File(filesRoot, relativePath).canonicalFile
+        val candidate = runCatching { File(filesRoot, relativePath).canonicalFile }.getOrNull() ?: return null
         return candidate.takeIf { it.path.startsWith(filesRoot.path + File.separator) }
     }
 
     fun deletePrivateFile(relativePath: String?): Boolean {
         if (relativePath.isNullOrBlank()) return true
-        return resolvePrivateFile(relativePath)?.delete() ?: false
+        val file = resolvePrivateFile(relativePath) ?: return false
+        return !file.exists() || file.delete()
     }
 
     fun deletePlanDirectory(planId: Long): Boolean {

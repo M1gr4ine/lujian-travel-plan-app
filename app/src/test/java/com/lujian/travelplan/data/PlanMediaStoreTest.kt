@@ -44,6 +44,24 @@ class PlanMediaStoreTest {
 
         assertNull(store.resolvePrivateFile("../outside.jpg"))
     }
+
+    @Test
+    fun 已不存在的私有文件视为删除成功() {
+        val root = temporaryFolder.newFolder("idempotent")
+        val store = PlanMediaStore(root, FakeImageSource(byteArrayOf()))
+
+        assertTrue(store.deletePrivateFile("plans/1/photos/missing.jpg"))
+    }
+
+    @Test
+    fun 目录外路径不能被删除() {
+        val root = temporaryFolder.newFolder("outside-root")
+        val outside = temporaryFolder.newFile("outside.jpg")
+        val store = PlanMediaStore(root, FakeImageSource(byteArrayOf()))
+
+        assertFalse(store.deletePrivateFile(outside.canonicalPath))
+        assertTrue(outside.exists())
+    }
 }
 
 private class FakeImageSource(
