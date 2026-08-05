@@ -36,6 +36,8 @@
     </array>
     <key>LSSupportsOpeningDocumentsInPlace</key>
     <false/>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>选择旅行照片并复制到旅笺私有相册。</string>
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
     <key>UILaunchScreen</key>
@@ -58,4 +60,3 @@
     </array>
 </dict>
 </plist>
-

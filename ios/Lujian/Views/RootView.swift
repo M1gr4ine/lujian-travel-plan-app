@@ -1,32 +1,74 @@
 import SwiftUI
+import UniformTypeIdentifiers
+
+enum RootTab: Hashable {
+    case home
+    case board
+    case gallery
+    case profile
+}
 
 struct RootView: View {
     @ObservedObject var store: PlanStore
+    @State private var selectedTab: RootTab = .home
+    @State private var showsImporter = false
+    @State private var importMessage: String?
 
     var body: some View {
-        ZStack {
-            LujianPalette.paperDeep
-                .ignoresSafeArea()
+        TabView(selection: $selectedTab) {
+            HomeMapView(store: store)
+                .tabItem { Label("首页", systemImage: "map") }
+                .tag(RootTab.home)
 
-            VStack(spacing: 16) {
-                Image(systemName: "map.fill")
-                    .font(.system(size: 42, weight: .semibold))
-                    .foregroundStyle(LujianPalette.coral)
-                    .accessibilityHidden(true)
+            PlanBoardView(store: store, onImport: { showsImporter = true })
+                .tabItem { Label("旅笺板", systemImage: "suitcase") }
+                .tag(RootTab.board)
 
-                Text("旅笺")
-                    .font(.largeTitle.weight(.bold))
-                    .foregroundStyle(LujianPalette.ink)
+            GlobalGalleryView(store: store)
+                .tabItem { Label("相册", systemImage: "photo.on.rectangle.angled") }
+                .tag(RootTab.gallery)
 
-                Text("把旅行计划，收进随身手账")
-                    .font(.body)
-                    .foregroundStyle(LujianPalette.ink.opacity(0.70))
-                    .multilineTextAlignment(.center)
+            ProfileView(store: store)
+                .tabItem { Label("我", systemImage: "person.crop.circle") }
+                .tag(RootTab.profile)
+        }
+        .tint(LujianPalette.coral)
+        .fileImporter(
+            isPresented: $showsImporter,
+            allowedContentTypes: [.html],
+            allowsMultipleSelection: false
+        ) { result in
+            guard case let .success(urls) = result, let url = urls.first else {
+                if case let .failure(error) = result { importMessage = error.localizedDescription }
+                return
             }
-            .paperCard()
-            .padding(24)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("旅笺，把旅行计划收进随身手账")
+            importURL(url)
+        }
+        .onOpenURL(perform: importURL)
+        .alert("HTML 导入", isPresented: importAlertBinding) {
+            Button("知道了", role: .cancel) { importMessage = nil }
+        } message: {
+            Text(importMessage ?? "")
+        }
+    }
+
+    private var importAlertBinding: Binding<Bool> {
+        Binding(
+            get: { importMessage != nil },
+            set: { if !$0 { importMessage = nil } }
+        )
+    }
+
+    private func importURL(_ url: URL) {
+        Task { @MainActor in
+            do {
+                let result = try await PlanImportService(store: store).importURL(url)
+                let title = store.plan(id: result.planID)?.title ?? "旅行计划"
+                importMessage = result.replacedExisting ? "已更新“\(title)”" : "已导入“\(title)”"
+                selectedTab = .board
+            } catch {
+                importMessage = error.localizedDescription
+            }
         }
     }
 }

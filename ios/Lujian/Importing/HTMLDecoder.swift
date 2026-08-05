@@ -30,7 +30,7 @@ enum HTMLDecoder {
     static let maximumBytes = 50 * 1024 * 1024
     static let gb18030Encoding = String.Encoding(
         rawValue: CFStringConvertEncodingToNSStringEncoding(
-            CFStringEncoding(kCFStringEncodingGB_18030_2000)
+            CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)
         )
     )
 

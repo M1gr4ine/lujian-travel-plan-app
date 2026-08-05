@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>大连五日旅行计划</title>
+</head>
+<body>
+<main><h1>大连五日旅行计划</h1><p>从酒店出发，也回到酒店，把海风和三餐串成完整的一天。</p></main>
+<script id="lujian-plan" type="application/json">
+{
+  "schemaVersion": 1,
+  "title": "大连五日旅行计划",
+  "dateRange": "9月25日—9月29日",
+  "travelers": "2 人",
+  "style": "海滨慢旅行",
+  "baseArea": "中山区",
+  "budget": "预计 3000 元",
+  "destinations": [{"name":"大连","countryCode":"CN","latitude":38.914,"longitude":121.6147}],
+  "days": [{
+    "id":"day-1",
+    "label":"第一天",
+    "title":"海边与老城",
+    "distanceEstimate":"18 公里",
+    "durationEstimate":"约 1 小时",
+    "items":[
+      {"id":"item-1","time":"08:00","title":"酒店早餐","category":"早餐","cost":"含房费","notes":"吃完早餐从酒店出发","placeId":"hotel"},
+      {"id":"item-2","time":"10:00","title":"星海广场","category":"景点","cost":"免费","notes":"沿海步行","placeId":"xinghai"},
+      {"id":"item-3","time":"12:30","title":"海鲜午餐","category":"午餐","cost":"人均 120 元","notes":"选择明码标价餐厅","placeId":"lunch"},
+      {"id":"item-4","time":"18:00","title":"大连老菜晚餐","category":"晚餐","cost":"人均 100 元","notes":"用餐后返回酒店","placeId":"dinner"},
+      {"id":"item-5","time":"20:00","title":"返回酒店","category":"住宿","notes":"结束当天行程","placeId":"hotel"}
+    ],
+    "mapStops":[
+      {"id":"hotel-start","title":"酒店出发","latitude":38.921,"longitude":121.639},
+      {"id":"xinghai","title":"星海广场","latitude":38.8812,"longitude":121.5881},
+      {"id":"lunch","title":"海鲜午餐","latitude":38.895,"longitude":121.602},
+      {"id":"dinner","title":"大连老菜晚餐","latitude":38.916,"longitude":121.641},
+      {"id":"hotel-end","title":"返回酒店","latitude":38.921,"longitude":121.639}
+    ]
+  }],
+  "places":[
+    {"id":"hotel","name":"中山广场酒店","latitude":38.921,"longitude":121.639},
+    {"id":"xinghai","name":"星海广场","latitude":38.8812,"longitude":121.5881},
+    {"id":"lunch","name":"海鲜餐厅","latitude":38.895,"longitude":121.602},
+    {"id":"dinner","name":"大连老菜馆","latitude":38.916,"longitude":121.641}
+  ]
+}
+</script>
+</body>
+</html>
