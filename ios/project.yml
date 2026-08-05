@@ -1,0 +1,71 @@
+name: Lujian
+
+options:
+  bundleIdPrefix: com.lujian.travelplan
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "1.0.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+
+targets:
+  Lujian:
+    type: application
+    platform: iOS
+    sources:
+      - path: Lujian
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lujian.travelplan.ios
+        PRODUCT_NAME: 旅笺
+        INFOPLIST_FILE: Config/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1,2"
+
+  LujianTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: LujianTests
+    dependencies:
+      - target: Lujian
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lujian.travelplan.ios.tests
+        GENERATE_INFOPLIST_FILE: YES
+
+  LujianUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: LujianUITests
+    dependencies:
+      - target: Lujian
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lujian.travelplan.ios.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Lujian
+
+schemes:
+  Lujian:
+    build:
+      targets:
+        Lujian: all
+        LujianTests: [test]
+        LujianUITests: [test]
+    test:
+      gatherCoverageData: true
+      targets:
+        - name: LujianTests
+          parallelizable: false
+        - name: LujianUITests
+          parallelizable: false
