@@ -263,15 +263,6 @@ LujianJsonParser → DalianTemplateParser → GenericHtmlParser
 
 ## 📦 版本与安装
 
-### iOS 1.0.0
-
-iOS 版使用 SwiftUI、MapKit、PhotosPicker 和隔离 WKWebView，最低支持 iOS 17。CI 发布两类产物：
-
-- `Lujian-iOS-Simulator-1.0.0.app.zip`：解压后用 `xcrun simctl install booted Lujian.app` 安装到 iPhone 模拟器。
-- `Lujian-iOS-Unsigned-1.0.0.ipa`：未签名包，需要 Apple 开发者证书重签，或使用 AltStore/Sideloadly 侧载；不能直接安装到普通 iPhone。
-
-没有实机的情况下，发布流水线会执行全部 Swift 单元测试、两条 iPhone 模拟器 UI 流程，并实际安装、启动模拟器 App。详细边界见 [iOS 1.0.0 发布说明](docs/releases/ios-v1.0.0.md)。
-
 ### Android 1.2.0
 
 | 项目 | 当前配置 |
@@ -283,6 +274,17 @@ iOS 版使用 SwiftUI、MapKit、PhotosPicker 和隔离 WKWebView，最低支持
 | 编译与目标 SDK | API 37 |
 | CPU 架构 | 由 debug 构建依赖自动打包 |
 | 安装形式 | debug 签名侧载 APK（Releases 提供） |
+
+#### Android 手机直接安装
+
+1. 在手机上打开 [Android v1.2.0 Release](https://github.com/M1gr4ine/lujian-travel-plan-app/releases/tag/v1.2.0)。
+2. 展开 **Assets**，下载 `app-debug.apk`。
+3. 点击下载完成的 APK；如果系统拦截，按提示允许当前浏览器或文件管理器“安装未知应用”。
+4. 确认安装。系统提示应用有风险时，核对下载地址确实属于本仓库后再继续。
+
+升级安装要求新旧 APK 使用相同签名。如果出现“签名不一致”或“与现有应用冲突”，先导出需要保留的旅行计划，再卸载旧版；卸载会删除 App 私有目录中的计划和照片。
+
+#### Android ADB 安装
 
 本地构建后的 APK 位于：
 
@@ -296,7 +298,51 @@ app/build/outputs/apk/debug/app-debug.apk
 adb install -r app\build\outputs\apk\debug\app-debug.apk
 ```
 
-已验证安装包见 [GitHub Releases](https://github.com/M1gr4ine/lujian-travel-plan-app/releases/latest)。
+`-r` 表示保留数据升级安装；签名不一致时不能覆盖。其他已验证版本见 [GitHub Releases](https://github.com/M1gr4ine/lujian-travel-plan-app/releases)。
+
+### iOS 1.0.0
+
+iOS 版使用 SwiftUI、MapKit、PhotosPicker 和隔离 WKWebView，最低支持 iOS 17。安装包位于 [iOS 1.0.0 CI 预发布](https://github.com/M1gr4ine/lujian-travel-plan-app/releases/tag/ios-v1.0.0-ci.4)：
+
+- `Lujian-iOS-Unsigned-1.0.0.ipa`：iPhone 真机包，发布时未包含任何 Apple 证书或 Provisioning Profile。
+- `Lujian-iOS-Simulator-1.0.0.app.zip`：只能安装到 Xcode 的 iPhone 模拟器，不能安装到真机。
+- `SHA256SUMS.txt`：两个产物的 SHA-256 校验值。
+
+#### iPhone 真机侧载（Windows）
+
+推荐使用 [AltStore Classic](https://faq.altstore.io/altstore-classic/how-to-install-altstore-windows) 自动完成签名，无需手工创建 `.p12`：
+
+1. 安装 Apple 官网版 iTunes、iCloud，以及 AltServer；避免使用来源不明的签名网站或共享证书。
+2. 用数据线连接并解锁 iPhone，在手机上选择“信任此电脑”。
+3. 以管理员身份启动 AltServer。
+4. 按住 `Shift` 点击任务栏中的 AltServer 图标，选择 **Sideload .ipa…**。
+5. 选择 `Lujian-iOS-Unsigned-1.0.0.ipa` 和目标 iPhone，使用自己的 Apple ID 完成签名。
+6. 在 iPhone 中进入“设置 → 通用 → VPN 与设备管理”，信任该 Apple ID 对应的开发者 App。
+7. 进入“设置 → 隐私与安全性 → 开发者模式”，开启后按提示重启并再次确认。
+
+免费 Apple ID 的个人团队签名有效期为 7 天，且每台设备最多同时保留 3 个侧载 App；到期前让手机与运行 AltServer 的电脑处于同一网络，并在 AltStore 中刷新。Development、Ad Hoc 和 TestFlight 也都有有效期，正常渠道中只有通过 App Store 分发才不需要设备端定期重签。
+
+#### iPhone 真机安装（macOS + Xcode）
+
+使用源码和自己的 Apple 开发者身份签名是 Apple 官方开发安装方式：
+
+1. 安装 Xcode 16 或更高版本与 [XcodeGen](https://github.com/yonaskolb/XcodeGen)。
+2. 在仓库的 `ios` 目录执行 `xcodegen generate`，然后打开 `Lujian.xcodeproj`。
+3. 在 **Lujian Target → Signing & Capabilities** 中勾选 **Automatically manage signing**，选择自己的 Team；如果 Bundle Identifier 被占用，改为自己账号下的唯一标识。
+4. 数据线连接 iPhone，信任电脑并开启开发者模式。
+5. 在 Xcode 顶部选择该 iPhone，点击 **Run**，Xcode 会自动注册设备、生成描述文件、签名并安装。
+
+#### iPhone 模拟器安装（macOS）
+
+需要 Xcode 16 或更高版本，并先启动一个 iOS 17+ iPhone 模拟器：
+
+```bash
+unzip Lujian-iOS-Simulator-1.0.0.app.zip
+xcrun simctl install booted Lujian.app
+xcrun simctl launch booted com.lujian.travelplan.ios
+```
+
+发布流水线已执行全部 Swift 单元测试、两条 iPhone 模拟器 UI 流程，并实际安装、启动模拟器 App；由于没有可用 iPhone，本仓库未声明真机验证通过。详细边界见 [iOS 1.0.0 发布说明](docs/releases/ios-v1.0.0.md)。
 
 ## 🛠️ 技术栈
 
