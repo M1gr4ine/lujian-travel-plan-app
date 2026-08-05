@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct RootView: View {
+    @ObservedObject var store: PlanStore
+
     var body: some View {
         ZStack {
             LujianPalette.paperDeep
@@ -30,5 +32,5 @@ struct RootView: View {
 }
 
 #Preview {
-    RootView()
+    RootView(store: .temporary(root: FileManager.default.temporaryDirectory.appendingPathComponent("LujianPreview")))
 }
