@@ -46,6 +46,7 @@ jobs:
             -project Lujian.xcodeproj \
             -scheme Lujian \
             -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
+            -only-testing:LujianTests \
             -resultBundlePath build/TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             > build/xcodebuild.log 2>&1
