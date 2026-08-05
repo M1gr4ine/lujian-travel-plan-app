@@ -23,7 +23,7 @@ enum GallerySelectionPolicy {
             return false
         }.count
         let covers = keys.count - photos
-        switch (photos, covers) {
+        return switch (photos, covers) {
         case (0, let covers): "删除 \(covers) 张自定义预览图？"
         case (let photos, 0): "删除 \(photos) 张照片？"
         default: "删除 \(photos) 张照片和 \(covers) 张自定义预览图？"

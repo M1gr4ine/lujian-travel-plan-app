@@ -56,10 +56,14 @@ struct PlanBoardView: View {
             .navigationTitle(mode.title)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Picker("旅笺板类型", selection: $mode) {
-                        ForEach(BoardMode.allCases, id: \.self) { Text($0.title).tag($0) }
+                    Menu {
+                        ForEach(BoardMode.allCases, id: \.self) { value in
+                            Button(value.title) { mode = value }
+                        }
+                    } label: {
+                        Label(mode.title, systemImage: "chevron.down")
                     }
-                    .pickerStyle(.menu)
+                    .accessibilityIdentifier("旅笺板切换")
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if mode == .active && !isManaging {
